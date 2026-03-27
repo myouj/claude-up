@@ -1,0 +1,25 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.env
+
+# Go build artifacts
+backend/server
+backend/prompt-vault.db
+
+# Node dependencies
+frontend/node_modules/
+frontend/dist/
+
+# MiniMax output
+minimax-output/
+
+# OS files
+.DS_Store
+*.swp
+*.swo
+
+# IDE
+.idea/
+.vscode/
