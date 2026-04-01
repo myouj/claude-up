@@ -1,7 +1,11 @@
 package main
 
 import (
-	"log"
+	"net/http"
+	"os"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -9,6 +13,7 @@ import (
 	"gorm.io/gorm"
 
 	"prompt-vault/handlers"
+	"prompt-vault/middleware"
 	"prompt-vault/models"
 )
 
@@ -22,7 +27,9 @@ func main() {
 	var err error
 	db, err = gorm.Open(sqlite.Open("prompt-vault.db"), &gorm.Config{})
 	if err != nil {
-		log.Fatal("Failed to connect database:", err)
+		middleware.Fatal("failed to connect database", map[string]interface{}{
+			"error": err.Error(),
+		})
 	}
 
 	// 自动迁移
@@ -33,30 +40,81 @@ func main() {
 		&models.Skill{},
 		&models.Agent{},
 		&models.Translation{},
+		&models.ActivityLog{},
+		&models.Setting{},
 	)
 	if err != nil {
-		log.Fatal("Failed to migrate database:", err)
+		middleware.Fatal("failed to migrate database", map[string]interface{}{
+			"error": err.Error(),
+		})
 	}
 
 	// 初始化示例数据
 	initSampleData()
 
+	// 初始化日志系统
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel != "" {
+		switch strings.ToUpper(logLevel) {
+		case "DEBUG":
+			middleware.SetLevel(middleware.DEBUG)
+		case "INFO":
+			middleware.SetLevel(middleware.INFO)
+		case "WARN":
+			middleware.SetLevel(middleware.WARN)
+		case "ERROR":
+			middleware.SetLevel(middleware.ERROR)
+		}
+	}
+
+	middleware.Info("server starting", map[string]interface{}{
+		"version": "1.0",
+		"log_level": logLevel,
+	})
+
 	// 初始化处理器
-	promptHandler := handlers.NewPromptHandler(db)
+	activityHandler := handlers.NewActivityHandler(db)
+	promptHandler := handlers.NewPromptHandler(db, activityHandler)
 	versionHandler := handlers.NewVersionHandler(db)
-	testHandler := handlers.NewTestHandler(db)
-	skillHandler := handlers.NewSkillHandler(db)
-	agentHandler := handlers.NewAgentHandler(db)
+	testHandler := handlers.NewTestHandler(db, activityHandler)
+	skillHandler := handlers.NewSkillHandler(db, activityHandler)
+	agentHandler := handlers.NewAgentHandler(db, activityHandler)
 	translateHandler := handlers.NewTranslateHandler(db)
+	settingHandler := handlers.NewSettingHandler(db)
 
 	// 路由配置
-	r := gin.Default()
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
+
+	// 全局限流器放在 trace 之前以便统计 IP
+	rl := newRateLimiter(100, time.Minute)
+
+	// 全局中间件：恢复(带日志) -> TraceId -> 请求日志
+	r.Use(middleware.RecoveryLoggerMiddleware())
+	r.Use(middleware.TraceMiddleware())
+	r.Use(middleware.RequestLoggerMiddleware())
+
+	// 限流中间件（使用已在上面初始化的 rl）
+	r.Use(rateLimitMiddleware(rl))
 
 	// CORS 中间件
+	allowedOriginsEnv := os.Getenv("ALLOWED_ORIGINS")
+	var allowedOrigins []string
+	if allowedOriginsEnv != "" {
+		allowedOrigins = strings.Split(allowedOriginsEnv, ",")
+	}
 	r.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		origin := c.Request.Header.Get("Origin")
+		if origin != "" && len(allowedOrigins) > 0 {
+			for _, allowed := range allowedOrigins {
+				if strings.TrimSpace(allowed) == origin {
+					c.Header("Access-Control-Allow-Origin", origin)
+					c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+					c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+					break
+				}
+			}
+		}
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
@@ -73,6 +131,11 @@ func main() {
 		api.GET("/prompts/:id", promptHandler.Get)
 		api.PUT("/prompts/:id", promptHandler.Update)
 		api.DELETE("/prompts/:id", promptHandler.Delete)
+		api.POST("/prompts/:id/favorite", promptHandler.ToggleFavorite)
+		api.GET("/prompts/categories", promptHandler.ListCategories)
+		api.POST("/prompts/:id/clone", promptHandler.Clone)
+		api.GET("/prompts/export", promptHandler.Export)
+		api.POST("/prompts/import", promptHandler.Import)
 
 		// 版本管理
 		api.GET("/prompts/:id/versions", versionHandler.List)
@@ -83,6 +146,10 @@ func main() {
 		api.POST("/prompts/:id/test", testHandler.Test)
 		api.POST("/prompts/:id/optimize", testHandler.Optimize)
 		api.GET("/prompts/:id/tests", testHandler.List)
+		api.GET("/prompts/:id/tests/compare", testHandler.Compare)
+		api.GET("/prompts/:id/test-compare", testHandler.Compare)
+		api.GET("/prompts/:id/analytics", testHandler.Analytics)
+		api.GET("/models", testHandler.ListModels)
 
 		// Skills CRUD
 		api.GET("/skills", skillHandler.List)
@@ -90,6 +157,10 @@ func main() {
 		api.GET("/skills/:id", skillHandler.Get)
 		api.PUT("/skills/:id", skillHandler.Update)
 		api.DELETE("/skills/:id", skillHandler.Delete)
+		api.GET("/skills/categories", skillHandler.ListCategories)
+		api.POST("/skills/:id/clone", skillHandler.Clone)
+		api.GET("/skills/export", skillHandler.Export)
+		api.POST("/skills/import", skillHandler.Import)
 
 		// Agents CRUD
 		api.GET("/agents", agentHandler.List)
@@ -97,10 +168,23 @@ func main() {
 		api.GET("/agents/:id", agentHandler.Get)
 		api.PUT("/agents/:id", agentHandler.Update)
 		api.DELETE("/agents/:id", agentHandler.Delete)
+		api.GET("/agents/categories", agentHandler.ListCategories)
+		api.POST("/agents/:id/clone", agentHandler.Clone)
+		api.GET("/agents/export", agentHandler.Export)
+		api.POST("/agents/import", agentHandler.Import)
 
 		// 翻译
 		api.POST("/translate", translateHandler.Translate)
 		api.POST("/translate/:type/:id", translateHandler.TranslateEntity)
+
+		// 活动日志
+		api.GET("/activity-logs", activityHandler.List)
+
+		// 设置
+		api.GET("/settings", settingHandler.List)
+		api.GET("/settings/:key", settingHandler.Get)
+		api.PUT("/settings/:key", settingHandler.Set)
+		api.DELETE("/settings/:key", settingHandler.Delete)
 	}
 
 	// 统计 API
@@ -122,8 +206,114 @@ func main() {
 		})
 	})
 
-	log.Println("Server starting on :8080...")
+	// 全量导出
+	api.GET("/export", func(c *gin.Context) {
+		var prompts []models.Prompt
+		var skills []models.Skill
+		var agents []models.Agent
+		db.Order("updated_at DESC").Find(&prompts)
+		db.Order("updated_at DESC").Find(&skills)
+		db.Order("updated_at DESC").Find(&agents)
+
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"data": models.ExportPayload{
+				Version:    "1.0",
+				ExportedAt: time.Now().Format("2006-01-02 15:04:05"),
+				Prompts:    prompts,
+				Skills:     skills,
+				Agents:     agents,
+			},
+		})
+	})
+
+	middleware.Info("server listening", map[string]interface{}{
+		"addr": ":8080",
+	})
 	r.Run(":8080")
+}
+
+// ----- Rate Limiter -----
+
+type rateLimiter struct {
+	mu       sync.Mutex
+	requests map[string][]time.Time
+	limit    int
+	window   time.Duration
+}
+
+func newRateLimiter(limit int, window time.Duration) *rateLimiter {
+	rl := &rateLimiter{
+		requests: make(map[string][]time.Time),
+		limit:    limit,
+		window:   window,
+	}
+	// Start background cleanup goroutine to prevent memory leak.
+	go rl.gc()
+	return rl
+}
+
+// gc periodically cleans up expired entries to prevent unbounded memory growth.
+func (rl *rateLimiter) gc() {
+	ticker := time.NewTicker(rl.window)
+	defer ticker.Stop()
+	for range ticker.C {
+		rl.mu.Lock()
+		now := time.Now()
+		cutoff := now.Add(-rl.window)
+		for ip, times := range rl.requests {
+			valid := make([]time.Time, 0, len(times))
+			for _, t := range times {
+				if t.After(cutoff) {
+					valid = append(valid, t)
+				}
+			}
+			if len(valid) == 0 {
+				delete(rl.requests, ip)
+			} else {
+				rl.requests[ip] = valid
+			}
+		}
+		rl.mu.Unlock()
+	}
+}
+
+func (rl *rateLimiter) allow(ip string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	cutoff := now.Add(-rl.window)
+
+	// Filter old requests
+	valid := rl.requests[ip][:0]
+	for _, t := range rl.requests[ip] {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+	rl.requests[ip] = valid
+
+	if len(rl.requests[ip]) >= rl.limit {
+		return false
+	}
+	rl.requests[ip] = append(rl.requests[ip], now)
+	return true
+}
+
+func rateLimitMiddleware(rl *rateLimiter) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ip := c.ClientIP()
+		if !rl.allow(ip) {
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"success": false,
+				"error":   "Too many requests. Please try again later.",
+			})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
 }
 
 func initSampleData() {

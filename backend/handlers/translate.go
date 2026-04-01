@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -11,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"prompt-vault/middleware"
 	"prompt-vault/models"
 )
 
@@ -40,7 +39,7 @@ func (h *TranslateHandler) Translate(c *gin.Context) {
 
 	result, err := h.callTranslateAPI(input.Text, sourceLang, targetLang)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Translation service failed"})
 		return
 	}
 
@@ -119,7 +118,13 @@ func (h *TranslateHandler) TranslateEntity(c *gin.Context) {
 
 	result, err := h.callTranslateAPI(content, sourceLang, targetLang)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		middleware.GetTraceLogger(c).Error("translation service failed", map[string]interface{}{
+			"error": err.Error(),
+			"entity_type": entityType,
+			"entity_id": entityID,
+		})
+
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Translation service failed"})
 		return
 	}
 
@@ -162,58 +167,46 @@ func (h *TranslateHandler) TranslateEntity(c *gin.Context) {
 }
 
 func (h *TranslateHandler) callTranslateAPI(text, sourceLang, targetLang string) (string, error) {
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	baseURL := os.Getenv("OPENAI_BASE_URL")
-	if baseURL == "" {
-		baseURL = "https://api.openai.com/v1/chat/completions"
+	providerName := strings.ToLower(os.Getenv("TRANSLATE_PROVIDER"))
+	model := os.Getenv("TRANSLATE_MODEL")
+	if providerName == "" {
+		providerName = "openai"
+	}
+	if model == "" {
+		model = getDefaultTranslateModel(providerName)
 	}
 
-	systemPrompt := fmt.Sprintf("You are a professional translator. Translate the following text from %s to %s. Only output the translation, no explanations.", sourceLang, targetLang)
-	userPrompt := text
+	provider := getProvider(providerName)
+	apiKey := getProviderAPIKey(providerName)
 
 	if apiKey == "" {
 		return mockTranslate(text, sourceLang, targetLang), nil
 	}
 
-	reqBody := map[string]interface{}{
-		"model": "glm-5",
-		"messages": []map[string]string{
-			{"role": "system", "content": systemPrompt},
-			{"role": "user", "content": userPrompt},
-		},
-		"temperature": 0.4,
+	systemPrompt := fmt.Sprintf("You are a professional translator. Translate the following text from %s to %s. Only output the translation, no explanations.", sourceLang, targetLang)
+	messages := []map[string]string{
+		{"role": "system", "content": systemPrompt},
+		{"role": "user", "content": text},
 	}
 
-	jsonData, _ := json.Marshal(reqBody)
-	req, err := http.NewRequest("POST", baseURL, bytes.NewBuffer(jsonData))
+	response, _, err := provider.Call(messages, model)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("translate call failed: %w", err)
 	}
+	return response, nil
+}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
+func getDefaultTranslateModel(provider string) string {
+	switch provider {
+	case "claude":
+		return "claude-3-5-sonnet-20241022"
+	case "gemini":
+		return "gemini-2.0-flash"
+	case "minimax":
+		return "MiniMax-Text-01"
+	default:
+		return "gpt-4o"
 	}
-	defer resp.Body.Close()
-
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
-	}
-
-	if choices, ok := result["choices"].([]interface{}); ok && len(choices) > 0 {
-		if choice, ok := choices[0].(map[string]interface{}); ok {
-			if msg, ok := choice["message"].(map[string]interface{}); ok {
-				return msg["content"].(string), nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("unexpected response format")
 }
 
 func mockTranslate(text, sourceLang, targetLang string) string {

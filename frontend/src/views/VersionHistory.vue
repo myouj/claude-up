@@ -1,5 +1,6 @@
 <template>
   <div class="version-history">
+    <BreadcrumbNav :items="[{ name: '提示词', path: '/prompts' }, { name: '版本历史' }]" />
     <el-header>
       <div class="header-content">
         <div class="left">
@@ -109,6 +110,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import BreadcrumbNav from '../components/BreadcrumbNav.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -277,7 +279,7 @@ onMounted(() => {
 }
 
 .version-card:hover {
-  transform: translateX(4px);
+  transform: translateY(-2px);
   border-color: var(--color-border-hover);
 }
 

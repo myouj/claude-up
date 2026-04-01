@@ -3,23 +3,50 @@
     <el-container>
       <el-header>
         <div class="header-content">
-          <div class="brand">
-            <div class="logo">
-              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                <rect width="28" height="28" rx="8" fill="var(--color-primary)"/>
-                <path d="M8 10h12M8 14h8M8 18h10" stroke="white" stroke-width="2" stroke-linecap="round"/>
-              </svg>
+          <div class="left-group">
+            <el-button class="mobile-menu-btn" @click="showSidebar = true">
+              <el-icon><Menu /></el-icon>
+            </el-button>
+            <div class="brand">
+              <div class="logo">
+                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                  <rect width="28" height="28" rx="8" fill="var(--color-primary)"/>
+                  <path d="M8 10h12M8 14h8M8 18h10" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <h1>PromptVault</h1>
             </div>
-            <h1>PromptVault</h1>
           </div>
-          <el-button type="primary" class="create-btn" @click="showCreateDialog = true">
-            <el-icon><Plus /></el-icon>
-            新建提示词
-          </el-button>
+          <div class="actions-group">
+            <el-button type="primary" class="create-btn" @click="showCreateDialog = true">
+              <el-icon><Plus /></el-icon>
+              <span class="btn-text">新建提示词</span>
+            </el-button>
+            <el-dropdown trigger="click" @command="handleExport">
+              <el-button>
+                <el-icon><Download /></el-icon>
+                <span class="btn-text">导出</span>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="json">导出为 JSON</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <el-button @click="showImportDialog = true">
+              <el-icon><Upload /></el-icon>
+              <span class="btn-text">导入</span>
+            </el-button>
+            <el-button @click="showTemplateLibrary = true">
+              <el-icon><Collection /></el-icon>
+              <span class="btn-text">模板库</span>
+            </el-button>
+          </div>
         </div>
       </el-header>
 
       <el-container>
+        <!-- Desktop sidebar -->
         <el-aside width="240px" class="sidebar">
           <el-input
             v-model="searchKeyword"
@@ -69,6 +96,57 @@
             </div>
           </div>
         </el-aside>
+
+        <!-- Mobile sidebar drawer -->
+        <el-drawer v-model="showSidebar" title="筛选" size="280px" direction="ltr" class="mobile-sidebar-drawer">
+          <el-input
+            v-model="searchKeyword"
+            placeholder="搜索提示词..."
+            :prefix-icon="Search"
+            clearable
+            class="search-input"
+          />
+
+          <div class="nav-section">
+            <el-menu :default-active="activeCategory" @select="(key) => { handleCategorySelect(key); showSidebar = false }" :ellipsis="false">
+              <el-menu-item index="">
+                <el-icon><Document /></el-icon>
+                <span>全部提示词</span>
+                <span class="count">{{ prompts.length }}</span>
+              </el-menu-item>
+              <el-menu-item index="favorite">
+                <el-icon><Star /></el-icon>
+                <span>收藏</span>
+                <span class="count">{{ favoriteCount }}</span>
+              </el-menu-item>
+            </el-menu>
+          </div>
+
+          <div class="category-section">
+            <h3>分类</h3>
+            <div class="category-tags">
+              <el-tag
+                v-for="cat in categories"
+                :key="cat"
+                :type="activeCategory === cat ? 'primary' : 'info'"
+                class="category-tag"
+                :effect="activeCategory === cat ? 'dark' : 'light'"
+                @click="() => { handleCategorySelect(cat); showSidebar = false }"
+              >
+                {{ cat }}
+              </el-tag>
+              <el-tag
+                v-if="!categories.includes('未分类')"
+                type="info"
+                effect="light"
+                class="category-tag"
+                @click="() => { handleCategorySelect('未分类'); showSidebar = false }"
+              >
+                未分类
+              </el-tag>
+            </div>
+          </div>
+        </el-drawer>
 
         <el-main>
           <div v-if="filteredPrompts.length > 0" class="prompt-grid">
@@ -141,11 +219,22 @@
               </div>
 
               <template #footer>
-                <div class="card-footer">
-                  <span class="version-badge">
-                    <el-icon><Clock /></el-icon>
-                    v{{ prompt.version_count }}
-                  </span>
+                      <div class="card-footer">
+                  <div class="footer-left">
+                    <el-button
+                      size="small"
+                      text
+                      @click.stop="handleClone(prompt)"
+                      class="clone-btn"
+                      title="克隆"
+                    >
+                      <el-icon><CopyDocument /></el-icon>
+                    </el-button>
+                    <span class="version-badge">
+                      <el-icon><Clock /></el-icon>
+                      v{{ prompt.version_count }}
+                    </span>
+                  </div>
                   <span class="date">{{ formatDate(prompt.updated_at) }}</span>
                 </div>
               </template>
@@ -163,6 +252,16 @@
               创建第一个提示词
             </el-button>
           </el-empty>
+
+          <div v-if="totalPrompts > pageSize" class="pagination-wrapper">
+            <el-pagination
+              v-model:current-page="currentPage"
+              :page-size="pageSize"
+              :total="totalPrompts"
+              layout="prev, pager, next"
+              background
+            />
+          </div>
         </el-main>
       </el-container>
     </el-container>
@@ -233,21 +332,267 @@
         <el-button type="primary" @click="handleCreate">创建</el-button>
       </template>
     </el-dialog>
+
+    <!-- 导入对话框 -->
+    <el-dialog
+      v-model="showImportDialog"
+      title="导入提示词"
+      width="560px"
+      :close-on-click-modal="false"
+    >
+      <el-form :model="{ importType, importText }" label-position="top">
+        <el-form-item label="导入格式">
+          <el-radio-group v-model="importType">
+            <el-radio label="json">JSON</el-radio>
+            <el-radio label="md">Markdown</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="导入内容">
+          <el-input
+            v-model="importText"
+            type="textarea"
+            :rows="8"
+            :placeholder="importType === 'json' ? '粘贴 JSON 数据...' : '粘贴 Markdown 格式数据（## 标题\\n\\n内容\\n\\n---）'"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showImportDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleImport">导入</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 模板库对话框 -->
+    <el-drawer
+      v-model="showTemplateLibrary"
+      title="提示词模板库"
+      size="600px"
+      direction="rtl"
+    >
+      <div class="template-library">
+        <p class="template-intro">选择一个模板快速创建提示词</p>
+
+        <div class="template-grid">
+          <div
+            v-for="tpl in templates"
+            :key="tpl.name"
+            class="template-card"
+            @click="useTemplate(tpl)"
+          >
+            <div class="tpl-header">
+              <el-icon class="tpl-icon"><Document /></el-icon>
+              <span class="tpl-name">{{ tpl.name }}</span>
+            </div>
+            <p class="tpl-desc">{{ tpl.description }}</p>
+            <div class="tpl-tags">
+              <el-tag
+                v-for="tag in tpl.tags"
+                :key="tag"
+                size="small"
+                type="info"
+                effect="plain"
+              >{{ tag }}</el-tag>
+            </div>
+          </div>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
+import { Search, Collection, Menu } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const prompts = ref([])
 const searchKeyword = ref('')
 const activeCategory = ref('')
 const showCreateDialog = ref(false)
+const showImportDialog = ref(false)
+const showTemplateLibrary = ref(false)
+const showSidebar = ref(false)
+const currentPage = ref(1)
+const pageSize = ref(12)
+const totalPrompts = ref(0)
+const importType = ref('json')
+const importText = ref('')
+
+const templates = [
+  {
+    name: '角色扮演',
+    description: '定义 AI 扮演的角色和专业知识',
+    tags: ['角色', '专业'],
+    content: `## Role
+You are a [role/expertise level] with extensive experience in [field].
+
+## Context
+[Provide relevant background information about the user's situation]
+
+## Task
+[Describe the specific task or question]
+
+## Requirements
+- [Requirement 1]
+- [Requirement 2]
+
+## Output Format
+[Describe the expected response format]`
+  },
+  {
+    name: '代码生成',
+    description: '生成高质量、可运行的代码',
+    tags: ['代码', '开发'],
+    content: `## Task
+Generate [language/framework] code that [description].
+
+## Requirements
+- Language: [language]
+- Framework: [framework if applicable]
+- Follow best practices: [specific guidelines]
+
+## Input
+\`\`\`
+[paste your input here]
+\`\`\`
+
+## Output
+Provide clean, well-commented code with:
+- Clear function/variable names
+- Error handling
+- Type hints (if applicable)
+- Usage examples`
+  },
+  {
+    name: '代码审查',
+    description: '分析代码并提供改进建议',
+    tags: ['代码', '审查'],
+    content: `## Role
+You are an expert code reviewer with knowledge of:
+- Software design patterns
+- Security best practices
+- Performance optimization
+- Code readability
+
+## Task
+Review the following code and provide feedback:
+
+\`\`\`
+[code to review]
+\`\`\`
+
+## Review Criteria
+Evaluate on:
+1. Correctness and bugs
+2. Security vulnerabilities
+3. Performance issues
+4. Code style and readability
+5. Improvement suggestions
+
+## Output Format
+Provide a structured review with severity levels (Critical/High/Medium/Low) for each finding.`
+  },
+  {
+    name: '文案写作',
+    description: '创作吸引人的营销和商业文案',
+    tags: ['文案', '营销'],
+    content: `## Role
+You are a professional copywriter specializing in [industry/type].
+
+## Task
+Write [type of content] for [product/service/campaign].
+
+## Target Audience
+[Describe the audience demographics, pain points, and motivations]
+
+## Tone and Style
+- Tone: [formal/casual/professional]
+- Voice: [brand voice description]
+- Length: [desired length]
+
+## Key Points to Include
+- [Point 1]
+- [Point 2]
+- [Point 3]
+
+## Call to Action
+[Desired action]
+
+## Output
+[Format specifications if any]`
+  },
+  {
+    name: '数据解释',
+    description: '分析和解释复杂的数据',
+    tags: ['数据', '分析'],
+    content: `## Task
+Analyze the following data and provide insights:
+
+**Data:**
+\`\`\`
+[data or description of data]
+\`\`\`
+
+## Analysis Goals
+- [Goal 1]
+- [Goal 2]
+
+## Context
+[What decisions will this analysis inform?]
+
+## Output Format
+Provide:
+1. **Summary**: Key findings in 2-3 sentences
+2. **Detailed Analysis**: Breakdown by [relevant dimensions]
+3. **Insights**: Actionable observations
+4. **Recommendations**: Next steps based on the data`
+  },
+  {
+    name: '学习辅导',
+    description: '以苏格拉底式提问引导学习',
+    tags: ['教育', '学习'],
+    content: `## Role
+You are a patient, encouraging tutor who uses the Socratic method. You guide students to understanding through thoughtful questions rather than direct answers.
+
+## Student Context
+- Subject: [subject name]
+- Current level: [beginner/intermediate/advanced]
+- Topic: [specific topic]
+
+## Guidelines
+- Ask one question at a time
+- Build on student's previous answers
+- Use concrete examples to illustrate abstract concepts
+- Encourage critical thinking
+- Celebrate incremental progress
+
+## Task
+Help the student understand [topic/concept] by asking guiding questions.
+
+## Approach
+1. Assess current understanding with open questions
+2. Identify misconceptions gently
+3. Build toward the correct understanding
+4. Connect to broader concepts
+
+Begin by asking the student what they already know about [topic].`
+  }
+]
+
+const useTemplate = (tpl) => {
+  newPrompt.value = {
+    title: tpl.name,
+    content: tpl.content,
+    description: tpl.description,
+    category: tpl.tags[0] || '',
+    tags: tpl.tags
+  }
+  showTemplateLibrary.value = false
+  showCreateDialog.value = true
+}
 
 const newPrompt = ref({
   title: '',
@@ -264,33 +609,24 @@ const categories = computed(() => {
 
 const favoriteCount = computed(() => prompts.value.filter(p => p.is_favorite).length)
 
-const filteredPrompts = computed(() => {
-  let result = [...prompts.value]
-
-  if (searchKeyword.value) {
-    const kw = searchKeyword.value.toLowerCase()
-    result = result.filter(p =>
-      p.title.toLowerCase().includes(kw) ||
-      p.content.toLowerCase().includes(kw) ||
-      p.description?.toLowerCase().includes(kw)
-    )
-  }
-
-  if (activeCategory.value === 'favorite') {
-    result = result.filter(p => p.is_favorite)
-  } else if (activeCategory.value) {
-    result = result.filter(p => p.category === activeCategory.value)
-  }
-
-  // 置顶的排在前面
-  return result.sort((a, b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0))
-})
+const filteredPrompts = computed(() => prompts.value)
 
 const fetchPrompts = async () => {
   try {
-    const res = await axios.get('/api/prompts')
+    const params = {
+      page: currentPage.value,
+      limit: pageSize.value
+    }
+    if (searchKeyword.value) params.search = searchKeyword.value
+    if (activeCategory.value === 'favorite') params.favorite = 'true'
+    else if (activeCategory.value) params.category = activeCategory.value
+
+    const res = await axios.get('/api/prompts', { params })
     if (res.data.success) {
       prompts.value = res.data.data
+      if (res.data.meta) {
+        totalPrompts.value = res.data.meta.total
+      }
     }
   } catch (err) {
     console.error('Failed to fetch prompts:', err)
@@ -351,6 +687,61 @@ const handleDelete = async (prompt) => {
 
 const handleCategorySelect = (key) => {
   activeCategory.value = key
+  currentPage.value = 1
+}
+
+const handleClone = async (prompt) => {
+  try {
+    const res = await axios.post(`/api/prompts/${prompt.id}/clone`)
+    if (res.data.success) {
+      ElMessage.success('克隆成功')
+      fetchPrompts()
+    }
+  } catch (err) {
+    ElMessage.error('克隆失败')
+  }
+}
+
+const handleExport = async () => {
+  try {
+    const res = await axios.get('/api/prompts/export')
+    if (res.data.success) {
+      const content = JSON.stringify(res.data.data, null, 2)
+      const blob = new Blob([content], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'prompts.json'
+      a.click()
+      URL.revokeObjectURL(url)
+      ElMessage.success('导出成功')
+    }
+  } catch (err) {
+    ElMessage.error('导出失败')
+  }
+}
+
+const handleImport = () => {
+  if (!importText.value.trim()) {
+    ElMessage.warning('请输入要导入的内容')
+    return
+  }
+  try {
+    const payload = JSON.parse(importText.value)
+    axios.post('/api/prompts/import', { prompts: payload.prompts || payload })
+      .then(res => {
+        if (res.data.success) {
+          ElMessage.success(`成功导入 ${res.data.imported} 条提示词`)
+          showImportDialog.value = false
+          importText.value = ''
+          currentPage.value = 1
+          fetchPrompts()
+        }
+      })
+      .catch(() => ElMessage.error('导入失败'))
+  } catch (err) {
+    ElMessage.error('JSON 解析失败，请检查格式')
+  }
 }
 
 const goToEditor = (id) => router.push(`/prompts/${id}`)
@@ -365,6 +756,12 @@ const formatDate = (dateStr) => {
 }
 
 onMounted(fetchPrompts)
+
+watch(currentPage, () => fetchPrompts())
+watch(searchKeyword, (val) => {
+  currentPage.value = 1
+  fetchPrompts()
+})
 </script>
 
 <style scoped>
@@ -389,6 +786,17 @@ onMounted(fetchPrompts)
   align-items: center;
 }
 
+.left-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+.mobile-menu-btn {
+  display: none;
+  padding: var(--spacing-2);
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -405,6 +813,12 @@ onMounted(fetchPrompts)
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
+}
+
+.actions-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
 }
 
 .create-btn {
@@ -642,5 +1056,144 @@ onMounted(fetchPrompts)
   align-items: center;
   gap: var(--spacing-2);
   font-size: var(--font-size-sm);
+}
+
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.clone-btn {
+  padding: 2px 4px;
+  color: var(--color-text-muted);
+}
+
+.clone-btn:hover {
+  color: var(--color-primary);
+}
+
+.pagination-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--spacing-6);
+  padding-bottom: var(--spacing-4);
+}
+
+.template-library {
+  padding: 0 var(--spacing-2);
+}
+
+.template-intro {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--spacing-5);
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-4);
+}
+
+.template-card {
+  padding: var(--spacing-4);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.template-card:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.tpl-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  margin-bottom: var(--spacing-2);
+}
+
+.tpl-icon {
+  font-size: 20px;
+  color: var(--color-primary);
+}
+
+.tpl-name {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.tpl-desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-relaxed);
+  margin: 0 0 var(--spacing-3) 0;
+  min-height: 36px;
+}
+
+.tpl-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-1);
+}
+
+/* Responsive - Tablet */
+@media (max-width: 1024px) {
+  .prompt-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Responsive - Mobile */
+@media (max-width: 768px) {
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .header-content {
+    gap: var(--spacing-2);
+  }
+
+  .actions-group {
+    gap: var(--spacing-1);
+  }
+
+  .btn-text {
+    display: none;
+  }
+
+  .prompt-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .el-main {
+    padding: var(--spacing-3);
+  }
+
+  .pagination-wrapper {
+    margin-top: var(--spacing-4);
+  }
+
+  .template-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-row {
+    flex-direction: column;
+  }
+
+  .form-col {
+    width: 100%;
+  }
 }
 </style>

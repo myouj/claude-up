@@ -1,11 +1,23 @@
 <template>
   <div id="app">
-    <router-view />
+    <TopNav />
+    <main class="main-content">
+      <router-view />
+    </main>
   </div>
 </template>
 
 <script setup>
+import TopNav from './components/TopNav.vue'
 </script>
+
+<style scoped>
+.main-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--spacing-6);
+}
+</style>
 
 <style>
 /* ========================================

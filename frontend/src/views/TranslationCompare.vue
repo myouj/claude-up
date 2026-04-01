@@ -1,5 +1,6 @@
 <template>
   <div class="translation-compare">
+    <BreadcrumbNav :items="breadcrumbItems" />
     <el-header>
       <div class="header-content">
         <div class="left">
@@ -78,10 +79,19 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import BreadcrumbNav from '../components/BreadcrumbNav.vue'
+
+const breadcrumbItems = computed(() => {
+  const type = route.params.type
+  if (type === 'prompts') return [{ name: '提示词', path: '/prompts' }, { name: '翻译' }]
+  if (type === 'skills') return [{ name: 'Skills', path: '/skills' }, { name: '翻译' }]
+  if (type === 'agents') return [{ name: 'Agents', path: '/agents' }, { name: '翻译' }]
+  return []
+})
 
 const router = useRouter()
 const route = useRoute()

@@ -1,5 +1,6 @@
 <template>
   <div class="agent-editor">
+    <BreadcrumbNav :items="[{ name: 'Agents', path: '/agents' }, { name: '编辑' }]" />
     <el-header>
       <div class="header-content">
         <div class="left">
@@ -71,6 +72,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import BreadcrumbNav from '../components/BreadcrumbNav.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -161,6 +163,7 @@ onMounted(fetchAgent)
 .right {
   display: flex;
   gap: var(--spacing-2);
+  flex-shrink: 0;
 }
 
 .sidebar {

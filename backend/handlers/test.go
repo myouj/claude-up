@@ -1,26 +1,27 @@
 package handlers
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"prompt-vault/middleware"
 	"prompt-vault/models"
 )
 
 type TestHandler struct {
-	db *gorm.DB
+	db              *gorm.DB
+	activityHandler *ActivityHandler
 }
 
-func NewTestHandler(db *gorm.DB) *TestHandler {
-	return &TestHandler{db: db}
+func NewTestHandler(db *gorm.DB, activityHandler *ActivityHandler) *TestHandler {
+	return &TestHandler{db: db, activityHandler: activityHandler}
 }
 
 func (h *TestHandler) Test(c *gin.Context) {
@@ -36,29 +37,63 @@ func (h *TestHandler) Test(c *gin.Context) {
 		return
 	}
 
-	// 调用 AI API
-	response, tokens, err := h.callAI(input)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
-		return
+	providerName := strings.ToLower(input.Provider)
+	if providerName == "" {
+		providerName = "openai"
 	}
 
-	// 保存测试记录
+	provider := getProvider(providerName)
+	apiKey := getProviderAPIKey(providerName)
+
+	var response string
+	var tokens int
+
+	if apiKey == "" {
+		response = mockAIResponse(input.Content)
+		tokens = 100
+	} else {
+		var messages []map[string]string
+		for _, m := range input.Messages {
+			messages = append(messages, map[string]string{
+				"role":    m.Role,
+				"content": m.Content,
+			})
+		}
+		if len(messages) == 0 {
+			messages = append(messages, map[string]string{
+				"role":    "user",
+				"content": input.Content,
+			})
+		}
+
+		response, tokens, err = provider.Call(messages, input.Model)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "AI provider request failed"})
+			return
+		}
+	}
+
 	record := models.TestRecord{
 		PromptID:   uint(promptID),
-		VersionID:   0,
+		VersionID:  getLatestVersionID(h.db, uint(promptID)),
 		Model:      input.Model,
+		Provider:   provider.Name(),
 		PromptText: input.Content,
 		Response:   response,
 		TokensUsed: tokens,
+		LatencyMs:  0,
 	}
 	h.db.Create(&record)
+	if h.activityHandler != nil {
+		h.activityHandler.Log("test", record.ID, "tested", fmt.Sprintf(`{"prompt_id": %d, "model": "%s", "provider": "%s"}`, promptID, input.Model, provider.Name()))
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			"response":     response,
-			"tokens_used":  tokens,
+			"response":       response,
+			"tokens_used":    tokens,
+			"provider":       provider.Name(),
 			"test_record_id": record.ID,
 		},
 	})
@@ -77,28 +112,58 @@ func (h *TestHandler) Optimize(c *gin.Context) {
 		return
 	}
 
-	// 调用 AI 进行优化
-	optimized, err := h.callAIOptimize(input)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
-		return
+	providerName := strings.ToLower(input.Provider)
+	if providerName == "" {
+		providerName = "openai"
+	}
+	if input.Model == "" {
+		input.Model = getDefaultModel(providerName)
 	}
 
-	// 保存优化记录
+	provider := getProvider(providerName)
+	apiKey := getProviderAPIKey(providerName)
+
+	var optimized string
+	if apiKey == "" {
+		optimized = mockOptimizeResponse(input.Mode)
+	} else {
+		systemPrompt := buildOptimizeSystemPrompt(input.Mode)
+		messages := []map[string]string{
+			{"role": "system", "content": systemPrompt},
+			{"role": "user", "content": input.Content},
+		}
+		optimized, _, err = provider.Call(messages, input.Model)
+		if err != nil {
+			middleware.GetTraceLogger(c).Error("AI provider request failed", map[string]interface{}{
+				"error": err.Error(),
+				"prompt_id": promptID,
+				"provider": providerName,
+				"model": input.Model,
+			})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "AI provider request failed"})
+			return
+		}
+	}
+
 	record := models.TestRecord{
 		PromptID:   uint(promptID),
-		VersionID:   0,
-		Model:      "optimize",
+		VersionID:  getLatestVersionID(h.db, uint(promptID)),
+		Model:      input.Model,
+		Provider:   provider.Name(),
 		PromptText: input.Content,
 		Response:   optimized,
 		TokensUsed: 0,
 	}
 	h.db.Create(&record)
+	if h.activityHandler != nil {
+		h.activityHandler.Log("test", record.ID, "optimized", fmt.Sprintf(`{"prompt_id": %d, "mode": "%s", "provider": "%s"}`, promptID, input.Mode, provider.Name()))
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
 			"optimized": optimized,
+			"provider":  provider.Name(),
 		},
 	})
 }
@@ -111,163 +176,241 @@ func (h *TestHandler) List(c *gin.Context) {
 	}
 
 	var records []models.TestRecord
-	h.db.Where("prompt_id = ?", promptID).Order("created_at DESC").Limit(50).Find(&records)
+	countQuery := h.db.Model(&models.TestRecord{}).Where("prompt_id = ?", promptID)
+	query := h.db.Where("prompt_id = ?", promptID).Order("created_at DESC")
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    records,
+	offset, _, limit, _, meta := middleware.ParsePagination(c, countQuery, query)
+	query.Offset(offset).Limit(limit).Find(&records)
+
+	c.JSON(http.StatusOK, models.PaginatedResponse{
+		Success: true,
+		Data:    records,
+		Meta:    meta,
 	})
 }
 
-func (h *TestHandler) callAI(input models.TestRequest) (string, int, error) {
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		return mockAIResponse(input), 100, nil
+func (h *TestHandler) Compare(c *gin.Context) {
+	promptID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid prompt ID"})
+		return
 	}
 
-	var messages []map[string]string
-	if len(input.Messages) > 0 {
-		for _, m := range input.Messages {
-			messages = append(messages, map[string]string{
-				"role":    m.Role,
-				"content": m.Content,
+	// Get all versions for this prompt
+	var versions []models.PromptVersion
+	h.db.Where("prompt_id = ?", promptID).Order("version DESC").Find(&versions)
+	versionMap := make(map[uint]models.PromptVersion)
+	for _, v := range versions {
+		versionMap[v.ID] = v
+	}
+
+	// Get all test records for this prompt
+	var records []models.TestRecord
+	h.db.Where("prompt_id = ?", promptID).Order("created_at DESC").Find(&records)
+
+	// Group records by version_id
+	grouped := make(map[uint][]models.TestRecord)
+	for _, r := range records {
+		vid := r.VersionID
+		if vid == 0 {
+			// Unversioned tests go under the latest version
+			vid = getLatestVersionID(h.db, uint(promptID))
+		}
+		grouped[vid] = append(grouped[vid], r)
+	}
+
+	// Build response: one entry per version with its tests
+	var result []map[string]interface{}
+	for _, v := range versions {
+		tests := grouped[v.ID]
+		var testSummaries []map[string]interface{}
+		for _, t := range tests {
+			testSummaries = append(testSummaries, map[string]interface{}{
+				"id":          t.ID,
+				"model":       t.Model,
+				"provider":    t.Provider,
+				"response":    t.Response,
+				"tokens_used": t.TokensUsed,
+				"created_at":  t.CreatedAt.Format("2006-01-02 15:04:05"),
 			})
 		}
-	} else {
-		messages = append(messages, map[string]string{
-			"role":    "user",
-			"content": input.Content,
+		result = append(result, map[string]interface{}{
+			"version_id": v.ID,
+			"version":    v.Version,
+			"content":    v.Content,
+			"comment":    v.Comment,
+			"tests":      testSummaries,
 		})
 	}
 
-	reqBody := map[string]interface{}{
-		"model": input.Model,
-		"messages": messages,
-	}
-
-	jsonData, _ := json.Marshal(reqBody)
-	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", 0, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", 0, err
-	}
-	defer resp.Body.Close()
-
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", 0, err
-	}
-
-	if choices, ok := result["choices"].([]interface{}); ok && len(choices) > 0 {
-		if choice, ok := choices[0].(map[string]interface{}); ok {
-			if msg, ok := choice["message"].(map[string]interface{}); ok {
-				content := msg["content"].(string)
-				usage := result["usage"].(map[string]interface{})
-				tokens := int(usage["total_tokens"].(float64))
-				return content, tokens, nil
-			}
-		}
-	}
-
-	return "", 0, fmt.Errorf("unexpected response format")
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    result,
+	})
 }
 
-func (h *TestHandler) callAIOptimize(input models.OptimizeRequest) (string, error) {
-	apiKey := os.Getenv("OPENAI_API_KEY")
-
-	var systemPrompt, userPrompt string
-	switch input.Mode {
-	case "improve":
-		systemPrompt = "You are an expert at optimizing prompts for large language models. Improve the given prompt to be clearer, more specific, and more effective. Return ONLY the optimized prompt without any explanation."
-		userPrompt = input.Content
-	case "structure":
-		systemPrompt = "You are an expert at structuring prompts. Add appropriate structure to the prompt including: role definition, context, task description, output format, and constraints. Return ONLY the structured prompt without any explanation."
-		userPrompt = input.Content
-	case "style":
-		systemPrompt = "You are an expert at adjusting prompt style. Modify the prompt's tone, length, and style as appropriate. Return ONLY the adjusted prompt without any explanation."
-		userPrompt = "Original prompt:\n" + input.Content + "\n\nProvide a version with adjusted style."
-	case "suggest":
-		systemPrompt = "You are an expert at analyzing prompts and providing improvement suggestions. List 3-5 specific, actionable suggestions to improve the prompt. Be concise and practical."
-		userPrompt = "Analyze this prompt and suggest improvements:\n\n" + input.Content
-	default:
-		systemPrompt = "You are an expert at optimizing prompts. Provide an improved version of the following prompt. Return ONLY the optimized prompt without any explanation."
-		userPrompt = input.Content
+func (h *TestHandler) Analytics(c *gin.Context) {
+	promptID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid prompt ID"})
+		return
 	}
 
-	if apiKey == "" {
-		return mockOptimizeResponse(input), nil
+	daysStr := c.DefaultQuery("days", "30")
+	days, _ := strconv.Atoi(daysStr)
+	if days <= 0 {
+		days = 30
+	}
+	if days > 365 {
+		days = 365
 	}
 
-	reqBody := map[string]interface{}{
-		"model": "gpt-4",
-		"messages": []map[string]string{
-			{"role": "system", "content": systemPrompt},
-			{"role": "user", "content": userPrompt},
+	since := time.Now().AddDate(0, 0, -days)
+
+	var records []models.TestRecord
+	h.db.Where("prompt_id = ? AND created_at >= ?", promptID, since).
+		Order("created_at ASC").
+		Find(&records)
+
+	if len(records) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"data": models.PromptAnalytics{
+				TotalTests:  0,
+				AvgTokens:   0,
+				AvgLatency:  0,
+				SuccessRate: 0,
+				ByModel:     map[string]int{},
+				ByDate:      []models.DailyStats{},
+			},
+		})
+		return
+	}
+
+	totalTests := int64(len(records))
+	var totalTokens, totalLatency int64
+	byModel := make(map[string]int)
+
+	for _, r := range records {
+		totalTokens += int64(r.TokensUsed)
+		totalLatency += r.LatencyMs
+		byModel[r.Model]++
+	}
+
+	avgTokens := float64(totalTokens) / float64(totalTests)
+	avgLatency := float64(totalLatency) / float64(totalTests)
+	successRate := 1.0 // all records are "successful" since they returned a response
+
+	// Group by date
+	dailyMap := make(map[string]struct {
+		count       int
+		totalTokens int64
+	})
+	for _, r := range records {
+		date := r.CreatedAt.Format("2006-01-02")
+		entry := dailyMap[date]
+		entry.count++
+		entry.totalTokens += int64(r.TokensUsed)
+		dailyMap[date] = entry
+	}
+
+	var byDate []models.DailyStats
+	for date, entry := range dailyMap {
+		avgT := float64(entry.totalTokens) / float64(entry.count)
+		byDate = append(byDate, models.DailyStats{
+			Date:      date,
+			Count:     entry.count,
+			AvgTokens: avgT,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": models.PromptAnalytics{
+			TotalTests:  totalTests,
+			AvgTokens:   avgTokens,
+			AvgLatency:  avgLatency,
+			SuccessRate: successRate,
+			ByModel:     byModel,
+			ByDate:      byDate,
 		},
-	}
-
-	jsonData, _ := json.Marshal(reqBody)
-	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
-	}
-
-	if choices, ok := result["choices"].([]interface{}); ok && len(choices) > 0 {
-		if choice, ok := choices[0].(map[string]interface{}); ok {
-			if msg, ok := choice["message"].(map[string]interface{}); ok {
-				return msg["content"].(string), nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("unexpected response format")
+	})
 }
 
-func mockAIResponse(input models.TestRequest) string {
-	if strings.Contains(strings.ToLower(input.Content), "hello") ||
-		strings.Contains(strings.ToLower(input.Content), "hi") {
-		return "Hello! I'm Claude, an AI assistant. How can I help you today?"
+func (h *TestHandler) ListModels(c *gin.Context) {
+	provider := c.DefaultQuery("provider", "")
+
+	if provider != "" {
+		models := getModelsByProvider(strings.ToLower(provider))
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"data": gin.H{
+				"provider": provider,
+				"models":   models,
+			},
+		})
+		return
 	}
-	if strings.Contains(strings.ToLower(input.Content), "write") &&
-		(strings.Contains(strings.ToLower(input.Content), "code") ||
-			strings.Contains(strings.ToLower(input.Content), "function")) {
-		return "// Example code response\nfunction hello() {\n  console.log('Hello, World!');\n}\n\n// This is a mock response for testing purposes."
+
+	// Return all models grouped by provider
+	result := make(map[string][]string)
+	for _, m := range availableModels {
+		result[m.Provider] = append(result[m.Provider], m.Model)
 	}
-	return "This is a mock AI response for testing. In production, this would be the actual AI response based on your prompt and selected model."
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    result,
+	})
 }
 
-func mockOptimizeResponse(input models.OptimizeRequest) string {
-	switch input.Mode {
-	case "improve":
-		return "## Improved Prompt\n\nYou are a helpful AI assistant with expertise in software development.\n\n**Task**: Help the user with their coding questions by providing clear, accurate, and well-structured responses.\n\n**Requirements**:\n- Be concise and to the point\n- Include code examples when relevant\n- Explain your reasoning\n\n**Output Format**: Provide your response in clear sections with headers."
-	case "structure":
-		return "**Role**: You are an expert software developer.\n\n**Context**: The user needs assistance with a technical problem or question.\n\n**Task**: Provide a clear, accurate, and helpful response.\n\n**Constraints**:\n- Be concise\n- Include examples when helpful\n- Focus on practical solutions\n\n**Output Format**: Markdown with code blocks if applicable."
-	case "suggest":
-		return "## Improvement Suggestions\n\n1. **Add role definition**: Specify who the AI should be (e.g., 'You are an expert developer...')\n\n2. **Define output format**: Specify how the response should be structured (e.g., 'Respond in markdown with headers...')\n\n3. **Add constraints**: Define any limitations or requirements (e.g., 'Keep responses under 200 words...')\n\n4. **Include examples**: Add a sample input/output pair to illustrate expected behavior"
+// ----- Helpers -----
+
+func getProviderAPIKey(provider string) string {
+	switch provider {
+	case "claude", "anthropic":
+		return os.Getenv("ANTHROPIC_API_KEY")
+	case "gemini", "google", "googleai":
+		return os.Getenv("GEMINI_API_KEY")
+	case "minimax":
+		return os.Getenv("MINIMAX_API_KEY")
 	default:
-		return "## Optimized Prompt\n\nYou are a highly capable AI assistant specialized in helping users with their tasks.\n\n**Objective**: Provide the most helpful and accurate response possible.\n\n**Approach**:\n- Understand the user's intent\n- Provide structured, clear answers\n- Include relevant examples\n- Be precise and actionable"
+		return os.Getenv("OPENAI_API_KEY")
+	}
+}
+
+func getDefaultModel(provider string) string {
+	switch provider {
+	case "claude":
+		return os.Getenv("CLAUDE_DEFAULT_MODEL")
+	case "gemini":
+		return os.Getenv("GEMINI_DEFAULT_MODEL")
+	case "minimax":
+		return os.Getenv("MINIMAX_DEFAULT_MODEL")
+	default:
+		return os.Getenv("OPENAI_DEFAULT_MODEL")
+	}
+}
+
+func getLatestVersionID(db *gorm.DB, promptID uint) uint {
+	var v models.PromptVersion
+	if err := db.Where("prompt_id = ?", promptID).Order("version DESC").First(&v).Error; err == nil {
+		return v.ID
+	}
+	return 0
+}
+
+func buildOptimizeSystemPrompt(mode string) string {
+	switch mode {
+	case "improve":
+		return "You are an expert at optimizing prompts for large language models. Improve the given prompt to be clearer, more specific, and more effective. Return ONLY the optimized prompt without any explanation."
+	case "structure":
+		return "You are an expert at structuring prompts. Add appropriate structure to the prompt including: role definition, context, task description, output format, and constraints. Return ONLY the structured prompt without any explanation."
+	case "style":
+		return "You are an expert at adjusting prompt style. Modify the prompt's tone, length, and style as appropriate. Return ONLY the adjusted prompt without any explanation."
+	case "suggest":
+		return "You are an expert at analyzing prompts and providing improvement suggestions. List 3-5 specific, actionable suggestions to improve the prompt. Be concise and practical."
+	default:
+		return "You are an expert at optimizing prompts. Provide an improved version of the following prompt. Return ONLY the optimized prompt without any explanation."
 	}
 }

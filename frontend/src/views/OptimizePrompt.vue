@@ -1,5 +1,6 @@
 <template>
   <div class="optimize-prompt">
+    <BreadcrumbNav :items="[{ name: '提示词', path: '/prompts' }, { name: 'AI 优化' }]" />
     <el-header>
       <div class="header-content">
         <div class="left">
@@ -143,6 +144,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import BreadcrumbNav from '../components/BreadcrumbNav.vue'
 
 const router = useRouter()
 const route = useRoute()

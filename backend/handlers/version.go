@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"prompt-vault/middleware"
 	"prompt-vault/models"
 )
 
@@ -26,7 +27,11 @@ func (h *VersionHandler) List(c *gin.Context) {
 	}
 
 	var versions []models.PromptVersion
-	h.db.Where("prompt_id = ?", promptID).Order("version DESC").Find(&versions)
+	countQuery := h.db.Model(&models.PromptVersion{}).Where("prompt_id = ?", promptID)
+	query := h.db.Where("prompt_id = ?", promptID).Order("version DESC")
+
+	offset, _, limit, _, meta := middleware.ParsePagination(c, countQuery, query)
+	query.Offset(offset).Limit(limit).Find(&versions)
 
 	var responses []models.VersionResponse
 	for _, v := range versions {
@@ -40,9 +45,10 @@ func (h *VersionHandler) List(c *gin.Context) {
 		})
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    responses,
+	c.JSON(http.StatusOK, models.PaginatedResponse{
+		Success: true,
+		Data:    responses,
+		Meta:    meta,
 	})
 }
 
@@ -70,36 +76,41 @@ func (h *VersionHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// 获取最大版本号
-	var maxVersion int
-	h.db.Model(&models.PromptVersion{}).Where("prompt_id = ?", promptID).Select("COALESCE(MAX(version), 0)").Scan(&maxVersion)
+	var newVersion models.PromptVersion
+	err = h.db.Transaction(func(tx *gorm.DB) error {
+		var maxVersion int
+		tx.Model(&models.PromptVersion{}).
+			Where("prompt_id = ?", promptID).
+			Select("COALESCE(MAX(version), 0)").
+			Scan(&maxVersion)
 
-	version := models.PromptVersion{
-		PromptID: uint(promptID),
-		Version:  maxVersion + 1,
-		Content:  input.Content,
-		Comment:  input.Comment,
-	}
-
-	if err := h.db.Create(&version).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		newVersion = models.PromptVersion{
+			PromptID: uint(promptID),
+			Version:  maxVersion + 1,
+			Content:  input.Content,
+			Comment:  input.Comment,
+		}
+		if err := tx.Create(&newVersion).Error; err != nil {
+			return err
+		}
+		return tx.Model(&prompt).Updates(map[string]interface{}{
+			"content": input.Content,
+		}).Error
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "An internal error occurred"})
 		return
 	}
-
-	// 同时更新 prompt 的当前内容
-	h.db.Model(&prompt).Updates(map[string]interface{}{
-		"content": input.Content,
-	})
 
 	c.JSON(http.StatusCreated, gin.H{
 		"success": true,
 		"data": models.VersionResponse{
-			ID:        version.ID,
-			PromptID:  version.PromptID,
-			Version:   version.Version,
-			Content:   version.Content,
-			Comment:   version.Comment,
-			CreatedAt: version.CreatedAt.Format("2006-01-02 15:04:05"),
+			ID:        newVersion.ID,
+			PromptID:  newVersion.PromptID,
+			Version:   newVersion.Version,
+			Content:   newVersion.Content,
+			Comment:   newVersion.Comment,
+			CreatedAt: newVersion.CreatedAt.Format("2006-01-02 15:04:05"),
 		},
 	})
 }

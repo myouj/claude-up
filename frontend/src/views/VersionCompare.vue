@@ -1,5 +1,6 @@
 <template>
   <div class="version-compare">
+    <BreadcrumbNav :items="[{ name: '提示词', path: '/prompts' }, { name: '版本对比' }]" />
     <el-header>
       <div class="header-content">
         <div class="left">
@@ -74,6 +75,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import * as Diff from 'diff'
+import BreadcrumbNav from '../components/BreadcrumbNav.vue'
 
 const router = useRouter()
 const route = useRoute()

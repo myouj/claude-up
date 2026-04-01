@@ -2,7 +2,7 @@
   <div class="dashboard">
     <el-header>
       <div class="header-content">
-        <div class="brand">
+        <div class="brand" @click="$router.push('/')">
           <div class="logo">
             <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
               <rect width="32" height="32" rx="8" fill="var(--color-primary)"/>
@@ -21,10 +21,7 @@
       <div class="stats-grid">
         <el-card class="stat-card prompts" @click="goToPrompts">
           <div class="stat-icon">
-            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-              <rect x="8" y="8" width="32" height="32" rx="6" stroke="currentColor" stroke-width="2.5"/>
-              <path d="M16 18h16M16 24h10M16 30h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
+            <el-icon><Document /></el-icon>
           </div>
           <div class="stat-content">
             <span class="stat-value">{{ stats.prompts }}</span>
@@ -34,10 +31,7 @@
 
         <el-card class="stat-card skills" @click="goToSkills">
           <div class="stat-icon">
-            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-              <circle cx="24" cy="24" r="14" stroke="currentColor" stroke-width="2.5"/>
-              <path d="M24 14v10l6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
+            <el-icon><Timer /></el-icon>
           </div>
           <div class="stat-content">
             <span class="stat-value">{{ stats.skills }}</span>
@@ -47,10 +41,7 @@
 
         <el-card class="stat-card agents" @click="goToAgents">
           <div class="stat-icon">
-            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-              <circle cx="24" cy="16" r="8" stroke="currentColor" stroke-width="2.5"/>
-              <path d="M12 40c0-6.627 5.373-12 12-12s12 5.373 12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-            </svg>
+            <el-icon><User /></el-icon>
           </div>
           <div class="stat-content">
             <span class="stat-value">{{ stats.agents }}</span>
@@ -73,6 +64,34 @@
           <el-card class="action-card" @click="goToAgents">
             <el-icon class="action-icon"><User /></el-icon>
             <span>管理 Agents</span>
+          </el-card>
+          <el-card class="action-card" @click="goToAnalytics">
+            <el-icon class="action-icon"><DataAnalysis /></el-icon>
+            <span>测试分析</span>
+          </el-card>
+          <el-card class="action-card" @click="goToActivity">
+            <el-icon class="action-icon"><Clock /></el-icon>
+            <span>活动日志</span>
+          </el-card>
+          <el-card class="action-card" @click="goToSettings">
+            <el-icon class="action-icon"><Setting /></el-icon>
+            <span>设置</span>
+          </el-card>
+          <el-card class="action-card" @click="goToApiDocs">
+            <el-icon class="action-icon"><Collection /></el-icon>
+            <span>API 文档</span>
+          </el-card>
+          <el-card class="action-card" @click="goToABTests">
+            <el-icon class="action-icon"><DataLine /></el-icon>
+            <span>A/B 测试</span>
+          </el-card>
+          <el-card class="action-card" @click="goToTeams">
+            <el-icon class="action-icon"><Users /></el-icon>
+            <span>团队协作</span>
+          </el-card>
+          <el-card class="action-card" @click="goToTemplates">
+            <el-icon class="action-icon"><Shop /></el-icon>
+            <span>模板市场</span>
           </el-card>
         </div>
       </div>
@@ -106,6 +125,12 @@ const fetchStats = async () => {
 const goToPrompts = () => router.push('/prompts')
 const goToSkills = () => router.push('/skills')
 const goToAgents = () => router.push('/agents')
+const goToActivity = () => router.push('/activity')
+const goToSettings = () => router.push('/settings')
+const goToApiDocs = () => router.push('/api-docs')
+const goToABTests = () => router.push('/ab-tests')
+const goToTeams = () => router.push('/teams')
+const goToTemplates = () => router.push('/templates')
 
 onMounted(fetchStats)
 </script>
@@ -122,7 +147,8 @@ onMounted(fetchStats)
   display: flex;
   align-items: center;
   padding: 0 var(--spacing-6);
-  height: 72px;
+  height: 64px;
+  flex-shrink: 0;
 }
 
 .header-content {
@@ -180,6 +206,7 @@ onMounted(fetchStats)
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-lg);
+  font-size: 28px;
 }
 
 .stat-card.prompts .stat-icon {
@@ -255,10 +282,51 @@ onMounted(fetchStats)
   color: var(--color-text-primary);
 }
 
-@media (max-width: 768px) {
-  .stats-grid,
+@media (max-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
   .actions-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .el-header {
+    padding: 0 var(--spacing-4);
+    height: 56px;
+  }
+  .subtitle {
+    display: none;
+  }
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-3);
+  }
+  .actions-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .el-main {
+    padding: var(--spacing-4);
+  }
+  .stat-card {
+    padding: var(--spacing-3);
+    gap: var(--spacing-3);
+  }
+  .stat-icon {
+    width: 44px;
+    height: 44px;
+    font-size: 22px;
+  }
+  .stat-value {
+    font-size: var(--font-size-2xl);
+  }
+  .action-card {
+    padding: var(--spacing-4);
+  }
+  .action-icon {
+    font-size: 24px;
+    margin-bottom: var(--spacing-2);
   }
 }
 </style>

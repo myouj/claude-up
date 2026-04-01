@@ -1,12 +1,16 @@
 <template>
   <div class="prompt-tester">
+    <BreadcrumbNav :items="[{ name: '提示词', path: '/prompts' }, { name: '测试' }]" />
     <el-header>
       <div class="header-content">
         <div class="left">
+          <el-button class="mobile-menu-btn" @click="showSidebar = true">
+            <el-icon><Menu /></el-icon>
+          </el-button>
           <el-button class="back-btn" @click="goBack">
             <el-icon><ArrowLeft /></el-icon>
           </el-button>
-          <h2>测试预览</h2>
+          <h2 class="page-title">测试预览</h2>
         </div>
         <div class="right">
           <el-select v-model="selectedModel" placeholder="选择模型" class="model-select">
@@ -31,7 +35,11 @@
           </el-select>
           <el-button type="primary" @click="sendTest" :loading="loading" :disabled="!userMessage.trim()">
             <el-icon><Promotion /></el-icon>
-            发送
+            <span class="btn-text">发送</span>
+          </el-button>
+          <el-button @click="goToCompare">
+            <el-icon><Connection /></el-icon>
+            <span class="btn-text">对比测试</span>
           </el-button>
         </div>
       </div>
@@ -52,6 +60,11 @@
             class="prompt-input"
           />
         </div>
+
+        <VariablePreviewer
+          ref="variablePreviewerRef"
+          :content="promptContent"
+        />
 
         <el-divider />
 
@@ -77,6 +90,49 @@
           <el-empty v-else description="暂无测试记录" :image-size="60" />
         </div>
       </el-aside>
+
+      <!-- Mobile sidebar drawer -->
+      <el-drawer v-model="showSidebar" title="提示词 & 历史" size="320px" direction="ltr">
+        <div class="prompt-section">
+          <h3>
+            <el-icon><Document /></el-icon>
+            当前提示词
+          </h3>
+          <el-input
+            v-model="promptContent"
+            type="textarea"
+            :rows="6"
+            placeholder="提示词内容..."
+            class="prompt-input"
+          />
+        </div>
+        <VariablePreviewer
+          ref="variablePreviewerRef"
+          :content="promptContent"
+        />
+        <el-divider />
+        <div class="history-section">
+          <h3>
+            <el-icon><Clock /></el-icon>
+            测试历史
+          </h3>
+          <div v-if="testHistory.length > 0" class="history-list">
+            <div
+              v-for="record in testHistory"
+              :key="record.id"
+              class="history-item"
+              @click="() => { loadRecord(record); showSidebar = false }"
+            >
+              <div class="history-header">
+                <el-tag size="small" type="info">{{ record.model }}</el-tag>
+                <span class="time">{{ formatTime(record.created_at) }}</span>
+              </div>
+              <p class="history-preview">{{ record.response?.substring(0, 60) }}...</p>
+            </div>
+          </div>
+          <el-empty v-else description="暂无测试记录" :image-size="60" />
+        </div>
+      </el-drawer>
 
       <el-main>
         <div class="chat-container">
@@ -136,6 +192,9 @@ import { ref, onMounted, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import { Menu } from '@element-plus/icons-vue'
+import BreadcrumbNav from '../components/BreadcrumbNav.vue'
+import VariablePreviewer from '../components/VariablePreviewer.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -147,6 +206,8 @@ const messages = ref([])
 const loading = ref(false)
 const testHistory = ref([])
 const messagesRef = ref(null)
+const showSidebar = ref(false)
+const variablePreviewerRef = ref(null)
 
 const fetchPrompt = async () => {
   try {
@@ -191,7 +252,12 @@ const sendTest = async () => {
   })
 
   try {
-    const fullPrompt = `${promptContent.value}\n\nUser: ${userInput}`
+    // 替换变量
+    const finalPrompt = variablePreviewerRef.value
+      ? variablePreviewerRef.value.renderedContent.value
+      : promptContent.value
+
+    const fullPrompt = `${finalPrompt}\n\nUser: ${userInput}`
     const res = await axios.post(`/api/prompts/${route.params.id}/test`, {
       content: fullPrompt,
       model: selectedModel.value,
@@ -239,6 +305,7 @@ const formatTime = (timeStr) => {
 }
 
 const goBack = () => router.back()
+const goToCompare = () => router.push(`/prompts/${route.params.id}/test-compare`)
 
 onMounted(() => {
   fetchPrompt()
@@ -501,5 +568,44 @@ onMounted(() => {
   justify-content: flex-end;
   gap: var(--spacing-2);
   margin-top: var(--spacing-3);
+}
+
+/* Responsive - Mobile */
+@media (max-width: 768px) {
+  .mobile-menu-btn {
+    display: flex !important;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .left {
+    gap: var(--spacing-2);
+  }
+
+  .page-title {
+    font-size: var(--font-size-md);
+  }
+
+  .right {
+    gap: var(--spacing-1);
+  }
+
+  .btn-text {
+    display: none;
+  }
+
+  .model-select {
+    width: 100px;
+  }
+
+  .el-main {
+    padding: var(--spacing-2);
+  }
+
+  .message-bubble {
+    max-width: 85%;
+  }
 }
 </style>

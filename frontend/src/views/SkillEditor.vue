@@ -1,5 +1,6 @@
 <template>
   <div class="skill-editor">
+    <BreadcrumbNav :items="[{ name: 'Skills', path: '/skills' }, { name: '编辑' }]" />
     <el-header>
       <div class="header-content">
         <div class="left">
@@ -65,6 +66,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import BreadcrumbNav from '../components/BreadcrumbNav.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -147,6 +149,7 @@ onMounted(fetchSkill)
 .right {
   display: flex;
   gap: var(--spacing-2);
+  flex-shrink: 0;
 }
 
 .sidebar {

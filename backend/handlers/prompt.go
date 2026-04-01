@@ -5,55 +5,86 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"prompt-vault/middleware"
 	"prompt-vault/models"
+	"prompt-vault/service"
 )
 
+const MaxSearchLength = 200
+
 type PromptHandler struct {
-	db *gorm.DB
+	db              *gorm.DB
+	promptService   *service.PromptService
+	activityHandler *ActivityHandler
 }
 
-func NewPromptHandler(db *gorm.DB) *PromptHandler {
-	return &PromptHandler{db: db}
+func NewPromptHandler(db *gorm.DB, activityHandler *ActivityHandler) *PromptHandler {
+	return &PromptHandler{
+		db:              db,
+		promptService:   service.NewPromptService(db),
+		activityHandler: activityHandler,
+	}
 }
 
 func (h *PromptHandler) List(c *gin.Context) {
 	var prompts []models.Prompt
+	countQuery := h.db.Model(&models.Prompt{})
 	query := h.db.Order("is_pinned DESC, updated_at DESC")
 
-	// 搜索过滤
 	if search := c.Query("search"); search != "" {
+		if len(search) > MaxSearchLength {
+			search = search[:MaxSearchLength]
+		}
 		query = query.Where("title LIKE ? OR content LIKE ? OR description LIKE ?",
 			"%"+search+"%", "%"+search+"%", "%"+search+"%")
+		countQuery = countQuery.Where("title LIKE ? OR content LIKE ? OR description LIKE ?",
+			"%"+search+"%", "%"+search+"%", "%"+search+"%")
 	}
-
-	// 分类过滤
 	if category := c.Query("category"); category != "" {
 		query = query.Where("category = ?", category)
+		countQuery = countQuery.Where("category = ?", category)
 	}
-
-	// 标签过滤
 	if tag := c.Query("tag"); tag != "" {
 		query = query.Where("tags LIKE ?", "%"+tag+"%")
+		countQuery = countQuery.Where("tags LIKE ?", "%"+tag+"%")
 	}
-
-	// 收藏过滤
 	if favorite := c.Query("favorite"); favorite == "true" {
 		query = query.Where("is_favorite = ?", true)
+		countQuery = countQuery.Where("is_favorite = ?", true)
 	}
 
-	query.Find(&prompts)
+	offset, _, limit, _, meta := middleware.ParsePagination(c, countQuery, query)
+	query.Offset(offset).Limit(limit).Find(&prompts)
 
-	// 转换为响应格式，包含版本数
+	// Batch fetch version counts in a single query (eliminates N+1).
+	versionCounts := make(map[uint]int)
+	if len(prompts) > 0 {
+		type countResult struct {
+			PromptID uint
+			Count    int64
+		}
+		var results []countResult
+		promptIDs := make([]uint, len(prompts))
+		for i, p := range prompts {
+			promptIDs[i] = p.ID
+		}
+		h.db.Model(&models.PromptVersion{}).
+			Select("prompt_id, COUNT(*) as count").
+			Where("prompt_id IN ?", promptIDs).
+			Group("prompt_id").
+			Scan(&results)
+		for _, r := range results {
+			versionCounts[r.PromptID] = int(r.Count)
+		}
+	}
+
 	var responses []models.PromptResponse
 	for _, p := range prompts {
-		var versionCount int64
-		h.db.Model(&models.PromptVersion{}).Where("prompt_id = ?", p.ID).Count(&versionCount)
-
-		tags := parseTags(p.Tags)
 		responses = append(responses, models.PromptResponse{
 			ID:           p.ID,
 			Title:        p.Title,
@@ -61,32 +92,35 @@ func (h *PromptHandler) List(c *gin.Context) {
 			ContentCN:    p.ContentCN,
 			Description:  p.Description,
 			Category:     p.Category,
-			Tags:         tags,
+			Tags:         parseTags(p.Tags),
+			Variables:    parseVariables(p.Variables),
 			IsFavorite:   p.IsFavorite,
 			IsPinned:     p.IsPinned,
-			VersionCount: int(versionCount),
+			VersionCount: versionCounts[p.ID],
 			CreatedAt:    p.CreatedAt.Format("2006-01-02 15:04:05"),
 			UpdatedAt:    p.UpdatedAt.Format("2006-01-02 15:04:05"),
 		})
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    responses,
+	c.JSON(http.StatusOK, models.PaginatedResponse{
+		Success: true,
+		Data:    responses,
+		Meta:    meta,
 	})
 }
 
 func (h *PromptHandler) Create(c *gin.Context) {
 	var input struct {
-		Title       string   `json:"title" binding:"required"`
-		Content     string   `json:"content" binding:"required"`
-		Description string   `json:"description"`
-		Category    string   `json:"category"`
-		Tags        []string `json:"tags"`
+		Title       string               `json:"title" binding:"required"`
+		Content     string               `json:"content" binding:"required"`
+		Description string               `json:"description"`
+		Category    string               `json:"category"`
+		Tags        []string             `json:"tags"`
+		Variables   []models.Variable    `json:"variables"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "An internal error occurred"})
 		return
 	}
 
@@ -96,14 +130,17 @@ func (h *PromptHandler) Create(c *gin.Context) {
 		Description: input.Description,
 		Category:    input.Category,
 		Tags:        marshalTags(input.Tags),
+		Variables:   marshalVariables(input.Variables),
 	}
 
 	if err := h.db.Create(&prompt).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "An internal error occurred"})
 		return
 	}
+	if h.activityHandler != nil {
+		h.activityHandler.Log("prompt", prompt.ID, "created", "")
+	}
 
-	// 自动创建第一个版本
 	version := models.PromptVersion{
 		PromptID: prompt.ID,
 		Version:  1,
@@ -127,13 +164,11 @@ func (h *PromptHandler) Get(c *gin.Context) {
 
 	var prompt models.Prompt
 	if err := h.db.First(&prompt, id).Error; err != nil {
-		fmt.Printf("Error fetching prompt: %v", err)
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Prompt not found"})
 		return
 	}
 
-	var versionCount int64
-	h.db.Model(&models.PromptVersion{}).Where("prompt_id = ?", prompt.ID).Count(&versionCount)
+	versionCount, _ := h.promptService.CountVersions(prompt.ID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -145,6 +180,7 @@ func (h *PromptHandler) Get(c *gin.Context) {
 			Description:  prompt.Description,
 			Category:     prompt.Category,
 			Tags:         parseTags(prompt.Tags),
+			Variables:    parseVariables(prompt.Variables),
 			IsFavorite:   prompt.IsFavorite,
 			IsPinned:     prompt.IsPinned,
 			VersionCount: int(versionCount),
@@ -168,61 +204,61 @@ func (h *PromptHandler) Update(c *gin.Context) {
 	}
 
 	var input struct {
-		Title       string   `json:"title"`
-		Content     string   `json:"content"`
-		Description string   `json:"description"`
-		Category    string   `json:"category"`
-		Tags        []string `json:"tags"`
-		IsFavorite  *bool    `json:"is_favorite"`
-		IsPinned    *bool    `json:"is_pinned"`
+		Title       string               `json:"title"`
+		Content     string               `json:"content"`
+		Description string               `json:"description"`
+		Category    string               `json:"category"`
+		Tags        []string             `json:"tags"`
+		Variables   []models.Variable    `json:"variables"`
+		IsFavorite  *bool                `json:"is_favorite"`
+		IsPinned    *bool                `json:"is_pinned"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "An internal error occurred"})
 		return
 	}
 
 	contentChanged := input.Content != "" && input.Content != prompt.Content
 
+	// Build updates map - only non-empty fields are updated.
+	updates := make(map[string]interface{})
 	if input.Title != "" {
-		prompt.Title = input.Title
+		updates["title"] = input.Title
 	}
 	if input.Content != "" {
-		prompt.Content = input.Content
+		updates["content"] = input.Content
 	}
 	if input.Description != "" {
-		prompt.Description = input.Description
+		updates["description"] = input.Description
 	}
 	if input.Category != "" {
-		prompt.Category = input.Category
+		updates["category"] = input.Category
 	}
 	if input.Tags != nil {
-		prompt.Tags = marshalTags(input.Tags)
+		updates["tags"] = marshalTags(input.Tags)
+	}
+	if input.Variables != nil {
+		updates["variables"] = marshalVariables(input.Variables)
 	}
 	if input.IsFavorite != nil {
-		prompt.IsFavorite = *input.IsFavorite
+		updates["is_favorite"] = *input.IsFavorite
 	}
 	if input.IsPinned != nil {
-		prompt.IsPinned = *input.IsPinned
+		updates["is_pinned"] = *input.IsPinned
 	}
 
-	if err := h.db.Save(&prompt).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+	if err := h.db.Model(&prompt).Updates(updates).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "An internal error occurred"})
 		return
 	}
+	if h.activityHandler != nil {
+		h.activityHandler.Log("prompt", prompt.ID, "updated", "")
+	}
 
-	// 如果内容变更，自动创建新版本
+	// Auto-create version if content changed (uses service layer).
 	if contentChanged {
-		var maxVersion int
-		h.db.Model(&models.PromptVersion{}).Where("prompt_id = ?", prompt.ID).Select("COALESCE(MAX(version), 0)").Scan(&maxVersion)
-
-		version := models.PromptVersion{
-			PromptID: prompt.ID,
-			Version:  maxVersion + 1,
-			Content:  prompt.Content,
-			Comment:  c.DefaultQuery("comment", ""),
-		}
-		h.db.Create(&version)
+		h.promptService.EnsureVersion(prompt.ID, prompt.Content, c.DefaultQuery("comment", ""))
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -238,18 +274,184 @@ func (h *PromptHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	// 删除关联的版本和测试记录
-	h.db.Where("prompt_id = ?", id).Delete(&models.PromptVersion{})
-	h.db.Where("prompt_id = ?", id).Delete(&models.TestRecord{})
-
-	if err := h.db.Delete(&models.Prompt{}, id).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+	if err := h.promptService.DeleteWithVersionsAndTests(uint(id)); err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Prompt not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to delete prompt"})
+		}
 		return
+	}
+	if h.activityHandler != nil {
+		h.activityHandler.Log("prompt", uint(id), "deleted", "")
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Prompt deleted successfully",
+	})
+}
+
+func (h *PromptHandler) ToggleFavorite(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid ID"})
+		return
+	}
+
+	var prompt models.Prompt
+	if err := h.db.First(&prompt, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Prompt not found"})
+		return
+	}
+
+	prompt.IsFavorite = !prompt.IsFavorite
+	h.db.Save(&prompt)
+	if h.activityHandler != nil {
+		action := "unfavorited"
+		if prompt.IsFavorite {
+			action = "favorited"
+		}
+		h.activityHandler.Log("prompt", prompt.ID, action, "")
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":     true,
+		"is_favorite": prompt.IsFavorite,
+	})
+}
+
+func (h *PromptHandler) ListCategories(c *gin.Context) {
+	var categories []string
+	h.db.Model(&models.Prompt{}).
+		Where("category != '' AND category IS NOT NULL").
+		Distinct("category").
+		Order("category ASC").
+		Pluck("category", &categories)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":    true,
+		"categories": categories,
+	})
+}
+
+func (h *PromptHandler) Clone(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid ID"})
+		return
+	}
+
+	var prompt models.Prompt
+	if err := h.db.First(&prompt, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Prompt not found"})
+		return
+	}
+
+	clone := models.Prompt{
+		Title:       prompt.Title + " (Copy)",
+		Content:      prompt.Content,
+		ContentCN:   prompt.ContentCN,
+		Description: prompt.Description,
+		Category:    prompt.Category,
+		Tags:        prompt.Tags,
+		Variables:   prompt.Variables,
+		IsFavorite:  false,
+		IsPinned:    false,
+	}
+
+	if err := h.db.Create(&clone).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "An internal error occurred"})
+		return
+	}
+	if h.activityHandler != nil {
+		h.activityHandler.Log("prompt", clone.ID, "cloned", fmt.Sprintf(`{"from_id": %d}`, id))
+	}
+
+	// Clone latest version
+	var latestVersion models.PromptVersion
+	if err := h.db.Where("prompt_id = ?", prompt.ID).Order("version DESC").First(&latestVersion).Error; err == nil {
+		version := models.PromptVersion{
+			PromptID: clone.ID,
+			Version:  1,
+			Content:  latestVersion.Content,
+			Comment:  "Cloned from prompt #" + strconv.Itoa(int(prompt.ID)),
+		}
+		h.db.Create(&version)
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"success": true,
+		"data":    clone,
+	})
+}
+
+func (h *PromptHandler) Export(c *gin.Context) {
+	var prompts []models.Prompt
+	h.db.Order("updated_at DESC").Find(&prompts)
+
+	export := models.ExportPayload{
+		Version:    "1.0",
+		ExportedAt: time.Now().Format("2006-01-02 15:04:05"),
+		Prompts:    prompts,
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    export,
+	})
+}
+
+func (h *PromptHandler) Import(c *gin.Context) {
+	var payload struct {
+		Prompts []models.Prompt `json:"prompts"`
+	}
+
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "An internal error occurred"})
+		return
+	}
+
+	imported := 0
+	var failed []models.FailedItem
+	for i, p := range payload.Prompts {
+		clone := models.Prompt{
+			Title:       p.Title,
+			Content:     p.Content,
+			ContentCN:   p.ContentCN,
+			Description: p.Description,
+			Category:    p.Category,
+			Tags:        p.Tags,
+			Variables:   p.Variables,
+			IsFavorite:  false,
+			IsPinned:    false,
+		}
+		if err := h.db.Create(&clone).Error; err != nil {
+			failed = append(failed, models.FailedItem{
+				Index: i,
+				Title: p.Title,
+				Error: err.Error(),
+			})
+			continue
+		}
+		version := models.PromptVersion{
+			PromptID: clone.ID,
+			Version:  1,
+			Content:  clone.Content,
+			Comment:  "Imported version",
+		}
+		h.db.Create(&version)
+		if h.activityHandler != nil {
+			h.activityHandler.Log("prompt", clone.ID, "imported", "")
+		}
+		imported++
+	}
+
+	c.JSON(http.StatusOK, models.ImportResult{
+		Success:    true,
+		Imported:   imported,
+		Failed:     failed,
+		TotalCount: len(payload.Prompts),
 	})
 }
 
@@ -267,5 +469,22 @@ func marshalTags(tags []string) string {
 		return "[]"
 	}
 	data, _ := json.Marshal(tags)
+	return string(data)
+}
+
+func parseVariables(vars string) []models.Variable {
+	if vars == "" {
+		return []models.Variable{}
+	}
+	var result []models.Variable
+	json.Unmarshal([]byte(vars), &result)
+	return result
+}
+
+func marshalVariables(vars []models.Variable) string {
+	if vars == nil {
+		return "[]"
+	}
+	data, _ := json.Marshal(vars)
 	return string(data)
 }

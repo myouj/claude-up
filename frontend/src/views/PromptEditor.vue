@@ -1,12 +1,15 @@
 <template>
   <div class="prompt-editor">
+    <BreadcrumbNav :items="[{ name: '提示词', path: '/prompts' }, { name: '编辑' }]" />
     <el-container>
       <el-header>
         <div class="header-content">
           <div class="left">
+            <el-button class="mobile-menu-btn" @click="showSidebar = true">
+              <el-icon><Menu /></el-icon>
+            </el-button>
             <el-button class="back-btn" @click="goBack">
               <el-icon><ArrowLeft /></el-icon>
-              返回
             </el-button>
             <div class="title-area">
               <el-input
@@ -24,29 +27,37 @@
             </div>
           </div>
           <div class="right">
-            <el-button @click="goToVersions">
+            <el-button class="tool-btn" @click="goToVersions">
               <el-icon><Clock /></el-icon>
               <span class="btn-text">版本历史</span>
             </el-button>
-            <el-button @click="goToCompare">
+            <el-button class="tool-btn" @click="goToCompare">
               <el-icon><Connection /></el-icon>
               <span class="btn-text">版本对比</span>
             </el-button>
-            <el-button @click="goToTranslate">
+            <el-button class="tool-btn" @click="goToTranslate">
               <el-icon><Translate /></el-icon>
               <span class="btn-text">翻译</span>
             </el-button>
-            <el-button @click="goToTest">
+            <el-button class="tool-btn" @click="goToTest">
               <el-icon><ChatDotRound /></el-icon>
               <span class="btn-text">测试</span>
             </el-button>
-            <el-button @click="goToOptimize">
+            <el-button class="tool-btn" @click="goToTestCompare">
+              <el-icon><Connection /></el-icon>
+              <span class="btn-text">对比测试</span>
+            </el-button>
+            <el-button class="tool-btn" @click="goToOptimize">
               <el-icon><MagicStick /></el-icon>
               <span class="btn-text">AI 优化</span>
             </el-button>
+            <el-button class="tool-btn" @click="goToAnalytics">
+              <el-icon><DataAnalysis /></el-icon>
+              <span class="btn-text">分析</span>
+            </el-button>
             <el-button type="primary" @click="handleSave">
               <el-icon><Check /></el-icon>
-              保存
+              <span class="btn-text">保存</span>
             </el-button>
           </div>
         </div>
@@ -111,6 +122,12 @@
                 </el-button>
               </div>
             </el-form-item>
+
+            <VariablePreviewer
+              ref="variablePreviewerRef"
+              :content="prompt.content"
+              @insert="insertVariables"
+            />
           </el-form>
 
           <el-divider />
@@ -131,6 +148,86 @@
             </div>
           </div>
         </el-aside>
+
+        <!-- Mobile sidebar drawer -->
+        <el-drawer v-model="showSidebar" title="属性" size="300px" direction="ltr">
+          <el-form :model="prompt" label-position="top" class="sidebar-form">
+            <el-form-item label="描述">
+              <el-input
+                v-model="prompt.description"
+                type="textarea"
+                :rows="3"
+                placeholder="简短描述这个提示词的用途"
+                maxlength="500"
+                show-word-limit
+              />
+            </el-form-item>
+            <el-form-item label="分类">
+              <el-select
+                v-model="prompt.category"
+                placeholder="选择分类"
+                allow-create
+                filterable
+                clearable
+                class="full-width"
+              >
+                <el-option v-for="cat in categories" :key="cat" :label="cat" :value="cat" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="标签">
+              <el-select
+                v-model="prompt.tags"
+                multiple
+                placeholder="添加标签"
+                allow-create
+                filterable
+                clearable
+                class="full-width"
+              />
+            </el-form-item>
+            <el-form-item label="操作">
+              <div class="action-buttons">
+                <el-button
+                  :type="prompt.is_favorite ? 'warning' : 'default'"
+                  :icon="prompt.is_favorite ? 'Star' : 'StarFilled'"
+                  @click="toggleFavorite"
+                  class="action-btn"
+                >
+                  {{ prompt.is_favorite ? '已收藏' : '收藏' }}
+                </el-button>
+                <el-button
+                  :type="prompt.is_pinned ? 'primary' : 'default'"
+                  :icon="prompt.is_pinned ? 'Pin' : 'Pushpin'"
+                  @click="togglePinned"
+                  class="action-btn"
+                >
+                  {{ prompt.is_pinned ? '已置顶' : '置顶' }}
+                </el-button>
+              </div>
+            </el-form-item>
+            <VariablePreviewer
+              ref="variablePreviewerRef"
+              :content="prompt.content"
+              @insert="insertVariables"
+            />
+            <el-divider />
+            <div class="info-section">
+              <h4>提示词信息</h4>
+              <div class="info-item">
+                <span class="info-label">版本</span>
+                <span class="info-value">v{{ versionCount }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">创建</span>
+                <span class="info-value">{{ formatDate(prompt.created_at) }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">更新</span>
+                <span class="info-value">{{ formatDate(prompt.updated_at) }}</span>
+              </div>
+            </div>
+          </el-form>
+        </el-drawer>
 
         <el-main>
           <div class="editor-container">
@@ -171,10 +268,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import { Menu } from '@element-plus/icons-vue'
+import BreadcrumbNav from '../components/BreadcrumbNav.vue'
+import VariablePreviewer from '../components/VariablePreviewer.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -193,8 +293,10 @@ const prompt = ref({
 })
 const versionCount = ref(0)
 const isEditingTitle = ref(false)
+const showSidebar = ref(false)
 const saveComment = ref('')
 const categories = ref([])
+const variablePreviewerRef = ref(null)
 
 const fetchPrompt = async () => {
   try {
@@ -289,12 +391,22 @@ You are a [role/expertise]
     : template
 }
 
+const insertVariables = () => {
+  if (variablePreviewerRef.value) {
+    prompt.value.content = variablePreviewerRef.value.renderedContent.value
+    variablePreviewerRef.value.clearValues()
+    ElMessage.success('变量已替换')
+  }
+}
+
 const goBack = () => router.back()
 const goToVersions = () => router.push(`/prompts/${route.params.id}/versions`)
 const goToCompare = () => router.push(`/prompts/${route.params.id}/compare`)
 const goToTest = () => router.push(`/prompts/${route.params.id}/test`)
+const goToTestCompare = () => router.push(`/prompts/${route.params.id}/test-compare`)
 const goToOptimize = () => router.push(`/prompts/${route.params.id}/optimize`)
 const goToTranslate = () => router.push(`/prompts/${route.params.id}/translate`)
+const goToAnalytics = () => router.push(`/prompts/${route.params.id}/analytics`)
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-'
@@ -525,5 +637,72 @@ onMounted(() => {
 
 .content-editor :deep(.el-textarea__inner:focus) {
   box-shadow: none;
+}
+
+/* Responsive - Tablet */
+@media (max-width: 1024px) {
+  .right {
+    gap: var(--spacing-1);
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+  .tool-btn {
+    flex-shrink: 0;
+  }
+}
+
+/* Responsive - Mobile */
+@media (max-width: 768px) {
+  .mobile-menu-btn {
+    display: flex !important;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .el-main {
+    padding: var(--spacing-3);
+  }
+
+  .header-content {
+    gap: var(--spacing-2);
+  }
+
+  .left {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .back-btn :deep(.el-icon) {
+    margin: 0;
+  }
+
+  .right {
+    gap: var(--spacing-1);
+    overflow-x: auto;
+    flex-shrink: 0;
+    padding-right: var(--spacing-2);
+  }
+
+  .right::-webkit-scrollbar {
+    display: none;
+  }
+
+  .btn-text {
+    display: none;
+  }
+
+  .title-area {
+    min-width: 0;
+  }
+
+  .title {
+    font-size: var(--font-size-md);
+  }
+
+  .title-input {
+    width: 160px;
+  }
 }
 </style>
