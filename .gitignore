@@ -7,6 +7,7 @@
 # Go build artifacts
 backend/server
 backend/prompt-vault.db
+backend/tmp
 
 # Node dependencies
 frontend/node_modules/
@@ -19,7 +20,10 @@ minimax-output/
 .DS_Store
 *.swp
 *.swo
+*.out
 
 # IDE
 .idea/
 .vscode/
+.claude/settings.json
+.claude/settings.local.json
