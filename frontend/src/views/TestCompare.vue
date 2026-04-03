@@ -19,9 +19,8 @@
             <el-option v-for="v in versions" :key="v.id" :label="`v${v.version}`" :value="v.id" />
           </el-select>
           <el-select v-model="selectedModel" class="model-select">
-            <el-option label="GPT-4" value="gpt-4" />
-            <el-option label="GPT-3.5" value="gpt-3.5-turbo" />
-            <el-option label="Claude 3" value="claude-3" />
+            <el-option label="MiniMax" value="MiniMax-Text-01" />
+            <el-option label="阿里百炼 (Qwen)" value="qwen-turbo" />
           </el-select>
           <el-button type="primary" @click="runNewTest" :loading="running">
             <el-icon><Promotion /></el-icon>

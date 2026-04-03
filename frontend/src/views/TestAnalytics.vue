@@ -13,9 +13,8 @@
         <div class="right">
           <el-select v-model="selectedModel" placeholder="全部模型" class="model-select" clearable>
             <el-option label="全部模型" :value="null" />
-            <el-option label="GPT-4" value="gpt-4" />
-            <el-option label="GPT-3.5" value="gpt-3.5-turbo" />
-            <el-option label="Claude 3" value="claude-3" />
+            <el-option label="MiniMax" value="MiniMax-Text-01" />
+            <el-option label="阿里百炼 (Qwen)" value="qwen-turbo" />
           </el-select>
           <el-date-picker
             v-model="dateRange"

@@ -14,22 +14,16 @@
         </div>
         <div class="right">
           <el-select v-model="selectedModel" placeholder="选择模型" class="model-select">
-            <el-option label="GPT-4" value="gpt-4">
+            <el-option label="MiniMax" value="MiniMax-Text-01">
               <div class="model-option">
-                <span>GPT-4</span>
-                <span class="model-desc">最强大</span>
+                <span>MiniMax</span>
+                <span class="model-desc">高性价比</span>
               </div>
             </el-option>
-            <el-option label="GPT-3.5" value="gpt-3.5-turbo">
+            <el-option label="阿里百炼 (Qwen)" value="qwen-turbo">
               <div class="model-option">
-                <span>GPT-3.5</span>
-                <span class="model-desc">快速</span>
-              </div>
-            </el-option>
-            <el-option label="Claude 3" value="claude-3">
-              <div class="model-option">
-                <span>Claude 3</span>
-                <span class="model-desc">长文本</span>
+                <span>阿里百炼</span>
+                <span class="model-desc">通义千问</span>
               </div>
             </el-option>
           </el-select>
@@ -200,7 +194,7 @@ const router = useRouter()
 const route = useRoute()
 
 const promptContent = ref('')
-const selectedModel = ref('gpt-4')
+const selectedModel = ref('MiniMax-Text-01')
 const userMessage = ref('')
 const messages = ref([])
 const loading = ref(false)

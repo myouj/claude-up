@@ -411,18 +411,109 @@ func (p *MiniMaxProvider) Call(messages []map[string]string, model string) (stri
 	return "", 0, fmt.Errorf("unexpected minimax response format")
 }
 
+// ----- Alibaba (阿里百炼) -----
+
+type AlibabaProvider struct {
+	baseURL string
+	model   string
+}
+
+func NewAlibabaProvider() *AlibabaProvider {
+	return &AlibabaProvider{
+		baseURL: os.Getenv("ALIBABA_BASE_URL"),
+		model:   os.Getenv("ALIBABA_DEFAULT_MODEL"),
+	}
+}
+
+func (p *AlibabaProvider) Name() string { return "alibaba" }
+
+func (p *AlibabaProvider) DefaultModel() string {
+	if p.model != "" {
+		return p.model
+	}
+	return "qwen-turbo"
+}
+
+func (p *AlibabaProvider) Call(messages []map[string]string, model string) (string, int, error) {
+	apiKey := os.Getenv("ALIBABA_API_KEY")
+	baseURL := p.baseURL
+	if baseURL == "" {
+		baseURL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+	}
+	if model == "" {
+		model = p.model
+	}
+	if model == "" {
+		model = "qwen-turbo"
+	}
+
+	reqBody := map[string]interface{}{
+		"model": model,
+		"input": map[string]interface{}{
+			"messages": messages,
+		},
+		"parameters": map[string]interface{}{
+			"result_format": "message",
+		},
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", 0, fmt.Errorf("alibaba request marshal error: %w", err)
+	}
+	url := baseURL + "/text/generation"
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", 0, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", 0, fmt.Errorf("alibaba response read error: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		return "", 0, fmt.Errorf("alibaba error: %s", http.StatusText(resp.StatusCode))
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", 0, fmt.Errorf("alibaba response parse error")
+	}
+
+	if output, ok := result["output"].(map[string]interface{}); ok {
+		if choices, ok := output["choices"].([]interface{}); ok && len(choices) > 0 {
+			if choice, ok := choices[0].(map[string]interface{}); ok {
+				if msg, ok := choice["message"].(map[string]interface{}); ok {
+					if content, ok := msg["content"].(string); ok {
+						return content, 0, nil
+					}
+				}
+			}
+		}
+	}
+	return "", 0, fmt.Errorf("unexpected alibaba response format")
+}
+
 // ----- Provider Registry -----
 
 func getProvider(name string) AIProvider {
 	switch strings.ToLower(name) {
-	case "claude", "anthropic":
-		return NewClaudeProvider()
-	case "gemini", "google", "googleai":
-		return NewGeminiProvider()
 	case "minimax":
 		return NewMiniMaxProvider()
-	default: // openai or empty
-		return NewOpenAIProvider()
+	case "alibaba", "qwen", "dashscope":
+		return NewAlibabaProvider()
+	default:
+		return NewMiniMaxProvider()
 	}
 }
 
@@ -463,21 +554,12 @@ type ModelInfo struct {
 }
 
 var availableModels = []ModelInfo{
-	// OpenAI
-	{"openai", "gpt-4o", 2.50, 10.00},
-	{"openai", "gpt-4o-mini", 0.15, 0.60},
-	{"openai", "gpt-4-turbo", 10.00, 30.00},
-	{"openai", "gpt-3.5-turbo", 0.50, 1.50},
-	// Claude
-	{"claude", "claude-3-5-sonnet-20241022", 3.00, 15.00},
-	{"claude", "claude-3-5-haiku-20241022", 0.80, 4.00},
-	{"claude", "claude-3-opus-20240229", 15.00, 75.00},
-	// Gemini
-	{"gemini", "gemini-2.0-flash", 0.00, 0.00},
-	{"gemini", "gemini-1.5-pro", 1.25, 5.00},
-	{"gemini", "gemini-1.5-flash", 0.075, 0.30},
 	// MiniMax
 	{"minimax", "MiniMax-Text-01", 0.99, 0.99},
+	// Alibaba (阿里百炼)
+	{"alibaba", "qwen-turbo", 0.00, 0.00},
+	{"alibaba", "qwen-plus", 0.00, 0.00},
+	{"alibaba", "qwen-max", 0.00, 0.00},
 }
 
 func getModelsByProvider(provider string) []string {

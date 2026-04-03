@@ -1,0 +1,121 @@
+<h2>Prompt 编辑页 60/40 分栏布局</h2>
+<p class="subtitle">红色虚线框内为全新 VariablePreviewPanel 区域</p>
+
+<div class="mockup">
+  <div class="mockup-header">Prompt 编辑页 - 60/40 分栏</div>
+  <div class="mockup-body">
+    <!-- Header -->
+    <div class="mock-header">
+      <span>← 返回</span>
+      <span style="flex:1;text-align:center;font-weight:600;">编辑 Prompt</span>
+      <span>保存</span>
+    </div>
+
+    <!-- Body: 60/40 split -->
+    <div style="display:flex;height:calc(100% - 50px);">
+
+      <!-- LEFT 60%: Editor + Sidebar -->
+      <div style="flex:0 0 60%;display:flex;border-right:2px dashed #ccc;">
+
+        <!-- Sidebar (300px) -->
+        <div class="mock-sidebar" style="width:300px;flex-shrink:0;">
+          <div class="mock-label">侧边栏</div>
+          <div class="placeholder" style="height:30px;">描述</div>
+          <div class="placeholder" style="height:30px;">分类</div>
+          <div class="placeholder" style="height:30px;">标签</div>
+          <div class="placeholder" style="height:30px;">收藏</div>
+        </div>
+
+        <!-- Editor Area -->
+        <div style="flex:1;padding:16px;">
+          <div class="mock-label">编辑区域 (60%)</div>
+          <div class="placeholder" style="height:60px;margin-bottom:8px;">Prompt 标题</div>
+          <div class="placeholder" style="height:200px;">Prompt 内容编辑器<br><br>
+            这里是 {{variable}} 变量<br>
+            正在编辑的内容...</div>
+        </div>
+      </div>
+
+      <!-- RIGHT 40%: VariablePreviewPanel -->
+      <div style="flex:0 0 40%;background:#fafafa;padding:16px;position:relative;">
+        <div style="position:absolute;top:0;left:0;right:0;bottom:0;border:2px dashed #e53e3e;border-radius:8px;pointer-events:none;margin:8px;"></div>
+        <div style="position:relative;z-index:1;">
+          <div class="mock-label" style="color:#e53e3e;">预览面板 (40%) - 新建</div>
+
+          <!-- Variable Input Section -->
+          <div style="background:white;border:1px solid #ddd;border-radius:8px;padding:12px;margin-bottom:12px;">
+            <div style="font-weight:600;margin-bottom:8px;font-size:14px;">📝 变量输入</div>
+            <div style="display:flex;align-items:center;margin-bottom:6px;">
+              <span style="font-family:monospace;color:#2563EB;font-size:12px;">{{</span>
+              <span style="font-family:monospace;font-size:12px;">variable</span>
+              <span style="font-family:monospace;color:#2563EB;font-size:12px;">}}</span>
+              <input class="mock-input" style="margin-left:8px;flex:1;font-size:12px;" value="已填写">
+            </div>
+            <div style="display:flex;align-items:center;">
+              <span style="font-family:monospace;color:#2563EB;font-size:12px;">{{</span>
+              <span style="font-family:monospace;font-size:12px;">name</span>
+              <span style="font-family:monospace;color:#2563EB;font-size:12px;">}}</span>
+              <input class="mock-input" style="margin-left:8px;flex:1;font-size:12px;" placeholder="输入 name 的值...">
+            </div>
+            <div style="margin-top:8px;font-size:11px;color:#666;">填充进度: <span style="color:#2563EB;font-weight:600;">50%</span></div>
+          </div>
+
+          <!-- Rendered Preview Section -->
+          <div style="background:white;border:1px solid #ddd;border-radius:8px;padding:12px;">
+            <div style="font-weight:600;margin-bottom:8px;font-size:14px;">👁 渲染预览</div>
+            <div style="background:#f5f5f5;border-radius:4px;padding:8px;font-family:monospace;font-size:12px;min-height:80px;">
+              这里是渲染后的内容<br>
+              <span style="background:#dcfce7;padding:1px 4px;border-radius:2px;">已填写</span> 的值被替换<br>
+              {{name}} 保持原样
+            </div>
+          </div>
+
+          <!-- Quality Score Card (optional in panel) -->
+          <div style="background:white;border:1px solid #ddd;border-radius:8px;padding:12px;margin-top:12px;">
+            <div style="font-weight:600;margin-bottom:8px;font-size:14px;">📊 质量评分</div>
+            <div style="display:flex;gap:8px;font-size:11px;">
+              <span style="background:#6366F1;color:white;padding:2px 6px;border-radius:4px;">Clarity 85</span>
+              <span style="background:#8B5CF6;color:white;padding:2px 6px;border-radius:4px;">Complete 72</span>
+              <span style="background:#EC4899;color:white;padding:2px 6px;border-radius:4px;">Example 60</span>
+              <span style="background:#14B8A6;color:white;padding:2px 6px;border-radius:4px;">Role 90</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:24px;">
+  <h3>现有 vs 新建对比</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px;">
+    <div style="background:#fff3cd;padding:12px;border-radius:8px;border:1px solid #ffc107;">
+      <h4 style="margin:0 0 8px;color:#856404;">❌ 现有实现</h4>
+      <ul style="margin:0;padding-left:16px;font-size:13px;color:#856404;">
+        <li>折叠式面板（collapsible）</li>
+        <li>放在编辑区域内</li>
+        <li>不占固定宽度</li>
+        <li> VariablePreviewer.vue</li>
+      </ul>
+    </div>
+    <div style="background:#d4edda;padding:12px;border-radius:8px;border:1px solid #28a745;">
+      <h4 style="margin:0 0 8px;color:#155724;">✓ 新方案</h4>
+      <ul style="margin:0;padding-left:16px;font-size:13px;color:#155724;">
+        <li>右侧独立面板（固定 40%）</li>
+        <li>始终展开，不折叠</li>
+        <li>VariablePreviewPanel.vue 新建</li>
+        <li>可扩展：质量评分卡、渲染预览</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="options" style="margin-top:24px;">
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content">
+      <h3>布局确认</h3>
+      <p>60/40 分栏、右侧独立 VariablePreviewPanel 方案可行</p>
+    </div>
+  </div>
+</div>
