@@ -56,6 +56,7 @@ func (s *QuotaService) GetQuota(provider string, model string) (*models.Quota, e
 
 // Check verifies if the provider has sufficient quota for the given cost.
 // Returns true if quota is sufficient, false if not, or error if quota not found.
+// If reset time has passed, it will reset the usage in the database.
 func (s *QuotaService) Check(provider string, cost int) (bool, error) {
 	quota, err := s.GetQuota(provider, "")
 	if err != nil {
@@ -66,8 +67,13 @@ func (s *QuotaService) Check(provider string, cost int) (bool, error) {
 		return false, err
 	}
 
-	// Check if reset is needed
+	// Check if reset is needed and persist it
 	if time.Now().After(quota.ResetAt) {
+		quota.Usage = 0
+		quota.ResetAt = nextMonth()
+		if err := s.db.Save(&quota).Error; err != nil {
+			return false, err
+		}
 		return true, nil
 	}
 
@@ -76,31 +82,44 @@ func (s *QuotaService) Check(provider string, cost int) (bool, error) {
 
 // Consume deducts the specified cost from the provider's quota.
 // Returns ErrQuotaExceeded if the cost would exceed the limit.
+// Uses a transaction to prevent race conditions.
 func (s *QuotaService) Consume(provider string, cost int) error {
-	quota, err := s.GetQuota(provider, "")
-	if err != nil {
-		if errors.Is(err, ErrQuotaNotFound) {
-			// No quota configured means unlimited
-			return nil
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var quota models.Quota
+		if err := tx.Where("provider = ?", provider).First(&quota).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				// No quota configured means unlimited
+				return nil
+			}
+			return err
 		}
-		return err
-	}
 
-	// Check if reset is needed
-	if time.Now().After(quota.ResetAt) {
-		// Reset usage
-		quota.Usage = 0
-		quota.ResetAt = nextMonth()
-		return s.db.Save(&quota).Error
-	}
+		// Check if reset is needed
+		if time.Now().After(quota.ResetAt) {
+			// Reset usage
+			quota.Usage = 0
+			quota.ResetAt = nextMonth()
+			return tx.Save(&quota).Error
+		}
 
-	// Check if consumption would exceed limit
-	if quota.Usage+cost > quota.Limit {
-		return ErrQuotaExceeded
-	}
+		// Check if consumption would exceed limit
+		if quota.Usage+cost > quota.Limit {
+			return ErrQuotaExceeded
+		}
 
-	quota.Usage += cost
-	return s.db.Save(&quota).Error
+		// Atomic update: increment usage with WHERE clause to prevent race condition
+		result := tx.Model(&models.Quota{}).
+			Where("provider = ? AND id = ? AND usage + ? <= ?", provider, quota.ID, cost, quota.Limit).
+			Update("usage", gorm.Expr("usage + ?", cost))
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			// Race condition detected or limit changed
+			return ErrQuotaExceeded
+		}
+		return nil
+	})
 }
 
 // GetUsage returns the current usage for a provider.
@@ -161,7 +180,11 @@ func (s *QuotaService) ResetUsage(provider string) error {
 }
 
 // nextMonth returns the first day of the next month.
+// Uses AddDate to properly handle December -> January transition.
 func nextMonth() time.Time {
 	now := time.Now()
-	return time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, now.Location())
+	// Add one month (AddDate handles year rollover properly)
+	nextMonth := now.AddDate(0, 1, 0)
+	// Return first day of next month at midnight
+	return time.Date(nextMonth.Year(), nextMonth.Month(), 1, 0, 0, 0, 0, now.Location())
 }
