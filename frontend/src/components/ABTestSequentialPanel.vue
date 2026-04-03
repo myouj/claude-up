@@ -11,14 +11,14 @@
         <div class="variant-column variant-a">
           <div class="variant-label">
             <span class="variant-tag" style="background: #2563EB; color: white;">A</span>
-            <span class="variant-name">{{ props.variantA.name || 'Variant A' }}</span>
+            <span class="variant-name">Variant A</span>
           </div>
           <div class="progress-bar-container">
-            <div class="progress-bar" :style="{ width: variantAPercent + '%', background: '#2563EB' }"></div>
+            <div class="progress-bar" :style="{ width: progressA + '%', background: '#2563EB' }"></div>
           </div>
           <div class="progress-stats">
-            <span class="runs-count">{{ props.variantA.runs }} 次</span>
-            <span class="avg-score">{{ props.variantA.metrics?.avg_score?.toFixed(1) || '0.0' }} 分</span>
+            <span class="runs-count">{{ resultsA.length }} 次</span>
+            <span class="avg-score">{{ avgScoreA.toFixed(1) }} 分</span>
           </div>
         </div>
 
@@ -31,14 +31,14 @@
         <div class="variant-column variant-b">
           <div class="variant-label">
             <span class="variant-tag" style="background: #F97316; color: white;">B</span>
-            <span class="variant-name">{{ props.variantB.name || 'Variant B' }}</span>
+            <span class="variant-name">Variant B</span>
           </div>
           <div class="progress-bar-container">
-            <div class="progress-bar" :style="{ width: variantBPercent + '%', background: '#F97316' }"></div>
+            <div class="progress-bar" :style="{ width: progressB + '%', background: '#F97316' }"></div>
           </div>
           <div class="progress-stats">
-            <span class="runs-count">{{ props.variantB.runs }} 次</span>
-            <span class="avg-score">{{ props.variantB.metrics?.avg_score?.toFixed(1) || '0.0' }} 分</span>
+            <span class="runs-count">{{ resultsB.length }} 次</span>
+            <span class="avg-score">{{ avgScoreB.toFixed(1) }} 分</span>
           </div>
         </div>
       </div>
@@ -58,7 +58,7 @@
         </div>
         <div class="stat-item">
           <span class="stat-label">已完成</span>
-          <span class="stat-value">{{ props.completedSamples || totalRuns }}</span>
+          <span class="stat-value">{{ props.completedSamples || completedRuns }}</span>
         </div>
         <div class="stat-item">
           <span class="stat-label">最大样本</span>
@@ -112,30 +112,12 @@
     <!-- Confidence Interval & Stats -->
     <div class="stats-row">
       <div class="stat-card">
-        <div class="stat-icon" style="background: #EFF6FF;">
-          <el-icon style="color: #2563EB;"><ChatLineSquare /></el-icon>
-        </div>
-        <div class="stat-content">
-          <span class="stat-label">置信区间 A</span>
-          <span class="stat-value">{{ confidenceIntervalA }}</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background: #FFF7ED;">
-          <el-icon style="color: #F97316;"><ChatLineSquare /></el-icon>
-        </div>
-        <div class="stat-content">
-          <span class="stat-label">置信区间 B</span>
-          <span class="stat-value">{{ confidenceIntervalB }}</span>
-        </div>
-      </div>
-      <div class="stat-card">
         <div class="stat-icon" :style="{ background: significanceBgColor }">
           <el-icon :style="{ color: significanceColor }"><TrendCharts /></el-icon>
         </div>
         <div class="stat-content">
           <span class="stat-label">统计显著性</span>
-          <span class="stat-value" :style="{ color: significanceColor }">{{ significanceStatus }}</span>
+          <span class="stat-value" :style="{ color: significanceColor }">{{ significanceLabel }}</span>
         </div>
       </div>
     </div>
@@ -153,12 +135,12 @@ import { computed } from 'vue'
 import { ChatLineSquare, TrendCharts, DataAnalysis, InfoFilled } from '@element-plus/icons-vue'
 
 const props = defineProps({
-  variantA: {
-    type: Object,
+  resultsA: {
+    type: Array,
     required: true
   },
-  variantB: {
-    type: Object,
+  resultsB: {
+    type: Array,
     required: true
   },
   minSamples: {
@@ -173,13 +155,17 @@ const props = defineProps({
     type: Number,
     default: null
   },
-  confidenceIntervalA: {
-    type: String,
-    default: '[3.0, 3.5]'
+  ciLower: {
+    type: Number,
+    default: 0
   },
-  confidenceIntervalB: {
+  ciUpper: {
+    type: Number,
+    default: 0
+  },
+  winner: {
     type: String,
-    default: '[4.0, 4.6]'
+    default: 'none'
   },
   pValue: {
     type: Number,
@@ -188,23 +174,23 @@ const props = defineProps({
 })
 
 // Calculate total runs
-const totalRuns = computed(() => {
-  return (props.variantA.runs || 0) + (props.variantB.runs || 0)
+const completedRuns = computed(() => props.resultsA.length + props.resultsB.length)
+
+// Variant progress percentages
+const progressA = computed(() => (props.resultsA.length / props.maxSamples) * 100)
+const progressB = computed(() => (props.resultsB.length / props.maxSamples) * 100)
+
+// Average scores
+const avgScoreA = computed(() => {
+  if (props.resultsA.length === 0) return 0
+  const sum = props.resultsA.reduce((acc, r) => acc + r.score, 0)
+  return sum / props.resultsA.length
 })
 
-// Variant progress percentages (50/50 max split)
-const variantAPercent = computed(() => {
-  if (totalRuns.value === 0) return 50
-  const aRuns = props.variantA.runs || 0
-  const maxPerVariant = Math.max(props.maxSamples / 2, aRuns)
-  return Math.min(100, (aRuns / maxPerVariant) * 100)
-})
-
-const variantBPercent = computed(() => {
-  if (totalRuns.value === 0) return 50
-  const bRuns = props.variantB.runs || 0
-  const maxPerVariant = Math.max(props.maxSamples / 2, bRuns)
-  return Math.min(100, (bRuns / maxPerVariant) * 100)
+const avgScoreB = computed(() => {
+  if (props.resultsB.length === 0) return 0
+  const sum = props.resultsB.reduce((acc, r) => acc + r.score, 0)
+  return sum / props.resultsB.length
 })
 
 // Sequential progress
@@ -212,68 +198,66 @@ const minPosition = computed(() => (props.minSamples / props.maxSamples) * 100)
 const maxPosition = computed(() => 100)
 
 const sequentialPercent = computed(() => {
-  const completed = props.completedSamples ?? totalRuns.value
+  const completed = props.completedSamples ?? completedRuns.value
   return Math.min(100, (completed / props.maxSamples) * 100)
 })
 
-// Statistical significance calculation based on p-value or score difference
-const significance = computed(() => {
-  const scoreA = props.variantA.metrics?.avg_score || 0
-  const scoreB = props.variantB.metrics?.avg_score || 0
-  const diff = Math.abs(scoreA - scoreB)
+// Confidence interval calculations
+const ciLeft = computed(() => Math.max(0, (props.ciLower + 0.5) * 100))
+const ciWidth = computed(() => Math.max(0, (props.ciUpper - props.ciLower) * 100))
+
+// Significance type based on p-value thresholds
+const significanceType = computed(() => {
   const pVal = props.pValue
+  if (pVal !== null && pVal < 0.05) return 'success'
+  if (pVal !== null && pVal < 0.1) return 'warning'
+  return 'info'
+})
 
-  // If p-value is provided, use it directly
-  if (pVal !== null) {
-    if (pVal < 0.01) return 'significant'
-    if (pVal < 0.05) return 'close'
-    return 'insufficient'
-  }
-
-  // Otherwise estimate based on score difference and sample size
-  const sampleSize = totalRuns.value
-  if (sampleSize < props.minSamples) return 'insufficient'
-  if (diff >= 1.0 && sampleSize >= 30) return 'significant'
-  if (diff >= 0.5 && sampleSize >= 20) return 'close'
-  return 'insufficient'
+// Significance label based on p-value thresholds
+const significanceLabel = computed(() => {
+  const pVal = props.pValue
+  if (pVal !== null && pVal < 0.05) return '显著'
+  if (pVal !== null && pVal < 0.1) return '接近'
+  return '不足'
 })
 
 const significanceColor = computed(() => {
-  switch (significance.value) {
-    case 'significant': return '#10B981' // green
-    case 'close': return '#F59E0B' // yellow
+  switch (significanceType.value) {
+    case 'success': return '#10B981' // green
+    case 'warning': return '#F59E0B' // yellow
     default: return '#EF4444' // red
   }
 })
 
 const significanceBgColor = computed(() => {
-  switch (significance.value) {
-    case 'significant': return '#ECFDF5'
-    case 'close': return '#FFFBEB'
+  switch (significanceType.value) {
+    case 'success': return '#ECFDF5'
+    case 'warning': return '#FFFBEB'
     default: return '#FEF2F2'
   }
 })
 
 const significanceText = computed(() => {
-  switch (significance.value) {
-    case 'significant': return '显著 (p < 0.05)'
-    case 'close': return '接近显著'
+  switch (significanceType.value) {
+    case 'success': return '显著 (p < 0.05)'
+    case 'warning': return '接近显著'
     default: return '不足'
   }
 })
 
 const significanceStatus = computed(() => {
-  switch (significance.value) {
-    case 'significant': return '已验证'
-    case 'close': return '进行中'
+  switch (significanceType.value) {
+    case 'success': return '已验证'
+    case 'warning': return '进行中'
     default: return '待积累'
   }
 })
 
 const significancePercent = computed(() => {
-  switch (significance.value) {
-    case 'significant': return 100
-    case 'close': return 65
+  switch (significanceType.value) {
+    case 'success': return 100
+    case 'warning': return 65
     default: return 25
   }
 })
@@ -284,9 +268,7 @@ const pValueText = computed(() => {
     return `= ${pVal.toFixed(4)}`
   }
   // Estimate p-value based on score difference
-  const scoreA = props.variantA.metrics?.avg_score || 0
-  const scoreB = props.variantB.metrics?.avg_score || 0
-  const diff = Math.abs(scoreA - scoreB)
+  const diff = Math.abs(avgScoreA.value - avgScoreB.value)
   if (diff >= 1.5) return '< 0.01'
   if (diff >= 1.0) return '< 0.05'
   if (diff >= 0.5) return '< 0.10'
@@ -294,22 +276,22 @@ const pValueText = computed(() => {
 })
 
 const recommendation = computed(() => {
-  if (significance.value === 'significant') {
+  if (significanceType.value === 'success') {
     return {
       type: 'success',
-      text: `Variant ${props.variantB.metrics?.avg_score > props.variantA.metrics?.avg_score ? 'B' : 'A'} 表现显著优于另一方，建议采用。`
+      text: `Variant ${avgScoreB.value > avgScoreA.value ? 'B' : 'A'} 表现显著优于另一方，建议采用。`
     }
   }
-  if (significance.value === 'close' && totalRuns.value >= props.maxSamples) {
+  if (significanceType.value === 'warning' && completedRuns.value >= props.maxSamples) {
     return {
       type: 'warning',
       text: '样本已达最大量，但差异未达统计显著水平，建议增加测试次数或接受当前结果。'
     }
   }
-  if (totalRuns.value < props.minSamples) {
+  if (completedRuns.value < props.minSamples) {
     return {
       type: 'info',
-      text: `还需 ${props.minSamples - totalRuns.value} 次样本才能进行有效的序贯检验。`
+      text: `还需 ${props.minSamples - completedRuns.value} 次样本才能进行有效的序贯检验。`
     }
   }
   return null
