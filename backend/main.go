@@ -42,6 +42,7 @@ func main() {
 		&models.Translation{},
 		&models.ActivityLog{},
 		&models.Setting{},
+		&models.AICallLog{},
 	)
 	if err != nil {
 		middleware.Fatal("failed to migrate database", map[string]interface{}{
@@ -89,10 +90,11 @@ func main() {
 	// 全局限流器放在 trace 之前以便统计 IP
 	rl := newRateLimiter(100, time.Minute)
 
-	// 全局中间件：恢复(带日志) -> TraceId -> 请求日志
+	// 全局中间件：恢复(带日志) -> TraceId -> 请求日志 -> AI调用日志
 	r.Use(middleware.RecoveryLoggerMiddleware())
 	r.Use(middleware.TraceMiddleware())
 	r.Use(middleware.RequestLoggerMiddleware())
+	r.Use(middleware.AICallLogMiddleware(db))
 
 	// 限流中间件（使用已在上面初始化的 rl）
 	r.Use(rateLimitMiddleware(rl))
