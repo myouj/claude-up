@@ -63,92 +63,7 @@
         </div>
       </el-header>
 
-      <el-container>
-        <el-aside width="300px" class="sidebar">
-          <el-form :model="prompt" label-position="top" class="sidebar-form">
-            <el-form-item label="描述">
-              <el-input
-                v-model="prompt.description"
-                type="textarea"
-                :rows="3"
-                placeholder="简短描述这个提示词的用途"
-                maxlength="500"
-                show-word-limit
-              />
-            </el-form-item>
-
-            <el-form-item label="分类">
-              <el-select
-                v-model="prompt.category"
-                placeholder="选择分类"
-                allow-create
-                filterable
-                clearable
-                class="full-width"
-              >
-                <el-option v-for="cat in categories" :key="cat" :label="cat" :value="cat" />
-              </el-select>
-            </el-form-item>
-
-            <el-form-item label="标签">
-              <el-select
-                v-model="prompt.tags"
-                multiple
-                placeholder="添加标签"
-                allow-create
-                filterable
-                clearable
-                class="full-width"
-              />
-            </el-form-item>
-
-            <el-form-item label="操作">
-              <div class="action-buttons">
-                <el-button
-                  :type="prompt.is_favorite ? 'warning' : 'default'"
-                  :icon="prompt.is_favorite ? 'Star' : 'StarFilled'"
-                  @click="toggleFavorite"
-                  class="action-btn"
-                >
-                  {{ prompt.is_favorite ? '已收藏' : '收藏' }}
-                </el-button>
-                <el-button
-                  :type="prompt.is_pinned ? 'primary' : 'default'"
-                  :icon="prompt.is_pinned ? 'Pin' : 'Pushpin'"
-                  @click="togglePinned"
-                  class="action-btn"
-                >
-                  {{ prompt.is_pinned ? '已置顶' : '置顶' }}
-                </el-button>
-              </div>
-            </el-form-item>
-
-            <VariablePreviewer
-              ref="variablePreviewerRef"
-              :content="prompt.content"
-              @insert="insertVariables"
-            />
-          </el-form>
-
-          <el-divider />
-
-          <div class="info-section">
-            <h4>提示词信息</h4>
-            <div class="info-item">
-              <span class="info-label">版本</span>
-              <span class="info-value">v{{ versionCount }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">创建</span>
-              <span class="info-value">{{ formatDate(prompt.created_at) }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">更新</span>
-              <span class="info-value">{{ formatDate(prompt.updated_at) }}</span>
-            </div>
-          </div>
-        </el-aside>
-
+      <el-container class="main-container">
         <!-- Mobile sidebar drawer -->
         <el-drawer v-model="showSidebar" title="属性" size="300px" direction="ltr">
           <el-form :model="prompt" label-position="top" class="sidebar-form">
@@ -205,11 +120,6 @@
                 </el-button>
               </div>
             </el-form-item>
-            <VariablePreviewer
-              ref="variablePreviewerRef"
-              :content="prompt.content"
-              @insert="insertVariables"
-            />
             <el-divider />
             <div class="info-section">
               <h4>提示词信息</h4>
@@ -229,7 +139,8 @@
           </el-form>
         </el-drawer>
 
-        <el-main>
+        <!-- Main content area (60%) -->
+        <el-main class="editor-main">
           <div class="editor-container">
             <div class="editor-header">
               <div class="editor-title">
@@ -262,6 +173,11 @@
             />
           </div>
         </el-main>
+
+        <!-- Variable Preview Panel (40%) -->
+        <el-aside width="40%" class="preview-panel">
+          <VariablePreviewPanel :content="prompt.content" />
+        </el-aside>
       </el-container>
     </el-container>
   </div>
@@ -274,7 +190,7 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { Menu } from '@element-plus/icons-vue'
 import BreadcrumbNav from '../components/BreadcrumbNav.vue'
-import VariablePreviewer from '../components/VariablePreviewer.vue'
+import VariablePreviewPanel from '../components/VariablePreviewPanel.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -296,7 +212,6 @@ const isEditingTitle = ref(false)
 const showSidebar = ref(false)
 const saveComment = ref('')
 const categories = ref([])
-const variablePreviewerRef = ref(null)
 
 const fetchPrompt = async () => {
   try {
@@ -389,14 +304,6 @@ You are a [role/expertise]
   prompt.value.content = prompt.value.content
     ? prompt.value.content + '\n\n' + template
     : template
-}
-
-const insertVariables = () => {
-  if (variablePreviewerRef.value) {
-    prompt.value.content = variablePreviewerRef.value.renderedContent.value
-    variablePreviewerRef.value.clearValues()
-    ElMessage.success('变量已替换')
-  }
 }
 
 const goBack = () => router.back()
@@ -639,6 +546,23 @@ onMounted(() => {
   box-shadow: none;
 }
 
+/* 60/40 Split Layout */
+.main-container {
+  display: flex;
+  height: calc(100vh - 64px);
+}
+
+.editor-main {
+  flex: 0 0 60%;
+  padding: var(--spacing-4);
+  background: var(--color-bg);
+}
+
+.preview-panel {
+  flex: 0 0 40%;
+  overflow: hidden;
+}
+
 /* Responsive - Tablet */
 @media (max-width: 1024px) {
   .right {
@@ -658,6 +582,19 @@ onMounted(() => {
   }
 
   .sidebar {
+    display: none;
+  }
+
+  .main-container {
+    flex-direction: column;
+  }
+
+  .editor-main {
+    flex: 1;
+    padding: var(--spacing-3);
+  }
+
+  .preview-panel {
     display: none;
   }
 
