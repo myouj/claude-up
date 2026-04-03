@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 
 	"prompt-vault/models"
+	"prompt-vault/service"
 )
 
 func init() {
@@ -41,6 +42,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 		&models.Translation{},
 		&models.ActivityLog{},
 		&models.Setting{},
+		&models.Task{},
 	)
 	if err != nil {
 		t.Fatalf("failed to migrate test db: %v", err)
@@ -65,6 +67,8 @@ func setupTestRouter(db *gorm.DB) *gin.Engine {
 	skillHandler := NewSkillHandler(db, activityHandler)
 	agentHandler := NewAgentHandler(db, activityHandler)
 	versionHandler := NewVersionHandler(db)
+	taskService := service.NewTaskService(db)
+	taskHandler := NewTaskHandler(db, taskService)
 
 	api := r.Group("/api")
 	api.GET("/prompts", promptHandler.List)
@@ -101,6 +105,11 @@ func setupTestRouter(db *gorm.DB) *gin.Engine {
 	api.POST("/agents/:id/clone", agentHandler.Clone)
 	api.GET("/agents/export", agentHandler.Export)
 	api.POST("/agents/import", agentHandler.Import)
+
+	api.GET("/tasks", taskHandler.ListTasks)
+	api.POST("/tasks", taskHandler.CreateTask)
+	api.GET("/tasks/:id", taskHandler.GetTask)
+	api.DELETE("/tasks/:id", taskHandler.CancelTask)
 
 	return r
 }
@@ -1566,6 +1575,177 @@ func TestMockOptimizeResponse(t *testing.T) {
 			got := mockOptimizeResponse(mode)
 			if len(got) == 0 {
 				t.Error("expected non-empty response")
+			}
+		})
+	}
+}
+
+// ----- Task Handler Tests -----
+
+func TestTaskHandler_CreateTask(t *testing.T) {
+	db := newTestDB(t)
+	router := setupTestRouter(db)
+
+	tests := []struct {
+		name       string
+		body       map[string]interface{}
+		wantStatus int
+		wantSucc   bool
+	}{
+		{
+			name:       "create batch_test task",
+			body:       map[string]interface{}{"type": "batch_test", "payload": map[string]interface{}{"prompt_ids": []int{1, 2, 3}}},
+			wantStatus: http.StatusOK,
+			wantSucc:   true,
+		},
+		{
+			name:       "create ab_test task",
+			body:       map[string]interface{}{"type": "ab_test"},
+			wantStatus: http.StatusOK,
+			wantSucc:   true,
+		},
+		{
+			name:       "create task with run_at",
+			body:       map[string]interface{}{"type": "eval_gen", "run_at": "2026-04-03T12:00:00Z"},
+			wantStatus: http.StatusOK,
+			wantSucc:   true,
+		},
+		{
+			name:       "invalid task type",
+			body:       map[string]interface{}{"type": "invalid_type"},
+			wantStatus: http.StatusBadRequest,
+			wantSucc:   false,
+		},
+		{
+			name:       "missing type",
+			body:       map[string]interface{}{},
+			wantStatus: http.StatusBadRequest,
+			wantSucc:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := postJSON(router, "/api/tasks", tt.body)
+			if w.Code != tt.wantStatus {
+				t.Errorf("status: got %d, want %d", w.Code, tt.wantStatus)
+			}
+
+			var resp APIResponse
+			json.Unmarshal(w.Body.Bytes(), &resp)
+			if resp.Success != tt.wantSucc {
+				t.Errorf("success: got %v, want %v", resp.Success, tt.wantSucc)
+			}
+		})
+	}
+}
+
+func TestTaskHandler_GetTask(t *testing.T) {
+	db := newTestDB(t)
+	router := setupTestRouter(db)
+
+	// Create a task first
+	svc := service.NewTaskService(db)
+	svc.Create(service.CreateTaskRequest{Type: models.TaskTypeBatchTest})
+
+	tests := []struct {
+		name       string
+		path       string
+		wantStatus int
+		wantSucc   bool
+	}{
+		{"valid id", "/api/tasks/1", http.StatusOK, true},
+		{"invalid id", "/api/tasks/999", http.StatusNotFound, false},
+		{"non-numeric id", "/api/tasks/abc", http.StatusBadRequest, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := getJSON(router, tt.path)
+			if w.Code != tt.wantStatus {
+				t.Errorf("status: got %d, want %d", w.Code, tt.wantStatus)
+			}
+
+			var resp APIResponse
+			json.Unmarshal(w.Body.Bytes(), &resp)
+			if resp.Success != tt.wantSucc {
+				t.Errorf("success: got %v, want %v", resp.Success, tt.wantSucc)
+			}
+		})
+	}
+}
+
+func TestTaskHandler_ListTasks(t *testing.T) {
+	db := newTestDB(t)
+	router := setupTestRouter(db)
+
+	// Create tasks
+	svc := service.NewTaskService(db)
+	for i := 0; i < 3; i++ {
+		svc.Create(service.CreateTaskRequest{Type: models.TaskTypeBatchTest})
+	}
+	svc.Create(service.CreateTaskRequest{Type: models.TaskTypeABTest})
+
+	tests := []struct {
+		name       string
+		query      string
+		wantCount  int
+		wantSucc   bool
+	}{
+		{"all tasks", "/api/tasks", 4, true},
+		{"with limit", "/api/tasks?limit=2", 2, true},
+		{"with offset", "/api/tasks?offset=2", 2, true},
+		{"filter by status", "/api/tasks?status=pending", 4, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := getJSON(router, tt.query)
+			if w.Code != http.StatusOK {
+				t.Errorf("status: got %d, want %d", w.Code, http.StatusOK)
+			}
+
+			var resp struct {
+				Success bool `json:"success"`
+				Data    struct {
+					Tasks []json.RawMessage `json:"tasks"`
+					Total int64            `json:"total"`
+				} `json:"data"`
+			}
+			json.Unmarshal(w.Body.Bytes(), &resp)
+			if resp.Success != tt.wantSucc {
+				t.Errorf("success: got %v, want %v", resp.Success, tt.wantSucc)
+			}
+			if len(resp.Data.Tasks) != tt.wantCount {
+				t.Errorf("count: got %d, want %d", len(resp.Data.Tasks), tt.wantCount)
+			}
+		})
+	}
+}
+
+func TestTaskHandler_CancelTask(t *testing.T) {
+	db := newTestDB(t)
+	router := setupTestRouter(db)
+
+	// Create a task
+	svc := service.NewTaskService(db)
+	svc.Create(service.CreateTaskRequest{Type: models.TaskTypeBatchTest})
+
+	tests := []struct {
+		name       string
+		path       string
+		wantStatus int
+	}{
+		{"cancel pending task", "/api/tasks/1", http.StatusOK},
+		{"cancel non-existing task", "/api/tasks/999", http.StatusNotFound},
+		{"cancel with invalid id", "/api/tasks/abc", http.StatusBadRequest},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := deleteReq(router, tt.path)
+			if w.Code != tt.wantStatus {
+				t.Errorf("status: got %d, want %d", w.Code, tt.wantStatus)
 			}
 		})
 	}

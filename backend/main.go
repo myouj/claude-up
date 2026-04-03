@@ -15,6 +15,8 @@ import (
 	"prompt-vault/handlers"
 	"prompt-vault/middleware"
 	"prompt-vault/models"
+	"prompt-vault/service"
+	"prompt-vault/worker"
 )
 
 var db *gorm.DB
@@ -43,6 +45,7 @@ func main() {
 		&models.ActivityLog{},
 		&models.Setting{},
 		&models.AICallLog{},
+		&models.Task{},
 	)
 	if err != nil {
 		middleware.Fatal("failed to migrate database", map[string]interface{}{
@@ -82,6 +85,12 @@ func main() {
 	agentHandler := handlers.NewAgentHandler(db, activityHandler)
 	translateHandler := handlers.NewTranslateHandler(db)
 	settingHandler := handlers.NewSettingHandler(db)
+	taskService := service.NewTaskService(db)
+	taskHandler := handlers.NewTaskHandler(db, taskService)
+
+	// 初始化 Worker Pool
+	workerPool := worker.NewPool(worker.DefaultWorkerConfig(), db)
+	workerPool.Start()
 
 	// 路由配置
 	gin.SetMode(gin.ReleaseMode)
@@ -187,6 +196,12 @@ func main() {
 		api.GET("/settings/:key", settingHandler.Get)
 		api.PUT("/settings/:key", settingHandler.Set)
 		api.DELETE("/settings/:key", settingHandler.Delete)
+
+		// 任务
+		api.GET("/tasks", taskHandler.ListTasks)
+		api.POST("/tasks", taskHandler.CreateTask)
+		api.GET("/tasks/:id", taskHandler.GetTask)
+		api.DELETE("/tasks/:id", taskHandler.CancelTask)
 	}
 
 	// 统计 API
