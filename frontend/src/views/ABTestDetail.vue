@@ -49,6 +49,15 @@
         </div>
       </div>
 
+      <!-- Sequential Panel -->
+      <ABTestSequentialPanel
+        v-if="test.variants"
+        :variant-a="test.variants[0]"
+        :variant-b="test.variants[1]"
+        :min-samples="15"
+        :max-samples="50"
+      />
+
       <!-- Variant Compare -->
       <ABTestCompare
         v-if="test.variants"
@@ -70,6 +79,7 @@ import { ElMessage } from 'element-plus'
 import { mockABTests } from '../composables/useABTest'
 import BreadcrumbNav from '../components/BreadcrumbNav.vue'
 import ABTestCompare from '../components/ABTestCompare.vue'
+import ABTestSequentialPanel from '../components/ABTestSequentialPanel.vue'
 
 const router = useRouter()
 const route = useRoute()

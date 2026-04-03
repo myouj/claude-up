@@ -113,6 +113,15 @@
               <el-icon><Trophy /></el-icon>
               Variant {{ test.winner.toUpperCase() }} 胜出
             </div>
+
+            <!-- Sequential Panel for Running Tests -->
+            <ABTestSequentialPanel
+              v-if="test.status === 'running' && test.variants"
+              :variant-a="test.variants[0]"
+              :variant-b="test.variants[1]"
+              :min-samples="15"
+              :max-samples="50"
+            />
           </div>
 
           <template #footer>
@@ -179,6 +188,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Menu } from '@element-plus/icons-vue'
 import { mockABTests } from '../composables/useABTest'
 import BreadcrumbNav from '../components/BreadcrumbNav.vue'
+import ABTestSequentialPanel from '../components/ABTestSequentialPanel.vue'
 
 const router = useRouter()
 
