@@ -46,6 +46,7 @@ func main() {
 		&models.Setting{},
 		&models.AICallLog{},
 		&models.Task{},
+		&models.EvalSet{},
 	)
 	if err != nil {
 		middleware.Fatal("failed to migrate database", map[string]interface{}{
@@ -87,6 +88,8 @@ func main() {
 	settingHandler := handlers.NewSettingHandler(db)
 	taskService := service.NewTaskService(db)
 	taskHandler := handlers.NewTaskHandler(db, taskService)
+	scoringHandler := handlers.NewScoringHandler(db)
+	evalHandler := handlers.NewEvalHandler(db)
 
 	// 初始化 Worker Pool
 	workerPool := worker.NewPool(worker.DefaultWorkerConfig(), db)
@@ -202,6 +205,20 @@ func main() {
 		api.POST("/tasks", taskHandler.CreateTask)
 		api.GET("/tasks/:id", taskHandler.GetTask)
 		api.DELETE("/tasks/:id", taskHandler.CancelTask)
+
+		// 评分
+		api.GET("/prompts/:id/score", scoringHandler.ScorePrompt)
+		api.POST("/prompts/score-batch", scoringHandler.ScoreBatch)
+		api.GET("/scoring/weights", scoringHandler.GetWeights)
+
+		// 评测集
+		api.GET("/prompts/:id/eval-sets", evalHandler.ListEvalSets)
+		api.POST("/prompts/:id/eval-sets", evalHandler.CreateEvalSet)
+		api.GET("/eval-sets/:id", evalHandler.GetEvalSet)
+		api.PUT("/eval-sets/:id", evalHandler.UpdateEvalSet)
+		api.DELETE("/eval-sets/:id", evalHandler.DeleteEvalSet)
+		api.POST("/prompts/:id/eval-sets/generate", evalHandler.GenerateAutoEvalSet)
+		api.POST("/prompts/:id/eval-sets/:eval_id/run", evalHandler.RunEval)
 	}
 
 	// 统计 API
