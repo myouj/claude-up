@@ -48,7 +48,7 @@ func NewPool(cfg WorkerConfig, db *gorm.DB) *Pool {
 		cfg:        cfg,
 		db:         db,
 		executor:   NewTaskExecutor(),
-		taskChan:   make(chan *models.Task, cfg.PollInterval*10),
+		taskChan:   make(chan *models.Task, cfg.PoolSize*10),
 		stopChan:   make(chan struct{}),
 		ctx:        ctx,
 		cancel:     cancel,
@@ -174,22 +174,19 @@ func (p *Pool) pollTasks() {
 	}
 
 	for _, task := range tasks {
-		// Atomically transition task to running
+		// Atomically transition task to running and set started_at
+		now := time.Now()
 		updated := p.db.Model(&models.Task{}).
 			Where("id = ? AND status = ?", task.ID, models.TaskStatusPending).
-			Update("status", models.TaskStatusRunning)
+			Updates(map[string]interface{}{
+				"status":     models.TaskStatusRunning,
+				"started_at": now,
+			})
 
 		if updated.RowsAffected == 0 {
 			// Task was already claimed by another poll
 			continue
 		}
-
-		// Set started_at
-		now := time.Now()
-		p.db.Model(&task).Updates(map[string]interface{}{
-			"status":     models.TaskStatusRunning,
-			"started_at": now,
-		})
 
 		// Make a copy for the channel
 		taskCopy := task

@@ -32,6 +32,7 @@ func (e *TaskExecutor) Execute(task *models.Task, updateFn func(*models.Task) er
 				"task_id": task.ID,
 				"error":   err.Error(),
 			})
+			return err
 		}
 	}
 

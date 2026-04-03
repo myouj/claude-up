@@ -110,22 +110,34 @@ func (h *TaskHandler) GetTask(c *gin.Context) {
 // @Failure 500 {object} map[string]interface{} "服务器内部错误"
 // @Router /api/tasks [get]
 func (h *TaskHandler) ListTasks(c *gin.Context) {
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
-	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	limitStr := c.DefaultQuery("limit", "20")
+	offsetStr := c.DefaultQuery("offset", "0")
 	status := c.Query("status")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
 
 	var tasks []models.Task
 	var total int64
-	var err error
+	var listErr error
 
 	if status != "" {
-		tasks, total, err = h.svc.ListByStatus(status, limit, offset)
+		tasks, total, listErr = h.svc.ListByStatus(status, limit, offset)
 	} else {
-		tasks, total, err = h.svc.List(limit, offset)
+		tasks, total, listErr = h.svc.List(limit, offset)
 	}
 
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+	if listErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": listErr.Error()})
 		return
 	}
 

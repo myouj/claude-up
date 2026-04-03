@@ -256,9 +256,9 @@ func TestTaskExecutor_ExecuteWithInvalidPayload(t *testing.T) {
 		return nil
 	}
 
-	// Should not error even with invalid payload
+	// Should return error on invalid payload
 	err := executor.Execute(task, updateFn)
-	if err != nil {
-		t.Errorf("Execute() error = %v", err)
+	if err == nil {
+		t.Error("Execute() expected error on invalid payload, got nil")
 	}
 }
