@@ -47,6 +47,8 @@ func main() {
 		&models.AICallLog{},
 		&models.Task{},
 		&models.EvalSet{},
+		&models.ABTest{},
+		&models.ABTestResult{},
 	)
 	if err != nil {
 		middleware.Fatal("failed to migrate database", map[string]interface{}{
@@ -90,6 +92,7 @@ func main() {
 	taskHandler := handlers.NewTaskHandler(db, taskService)
 	scoringHandler := handlers.NewScoringHandler(db)
 	evalHandler := handlers.NewEvalHandler(db)
+	abTestHandler := handlers.NewABTestHandler(db)
 
 	// 初始化 Worker Pool
 	workerPool := worker.NewPool(worker.DefaultWorkerConfig(), db)
@@ -219,6 +222,18 @@ func main() {
 		api.DELETE("/eval-sets/:id", evalHandler.DeleteEvalSet)
 		api.POST("/prompts/:id/eval-sets/generate", evalHandler.GenerateAutoEvalSet)
 		api.POST("/prompts/:id/eval-sets/:eval_id/run", evalHandler.RunEval)
+
+		// A/B 测试
+		api.GET("/ab-tests", abTestHandler.List)
+		api.GET("/ab-tests/:id", abTestHandler.Get)
+		api.GET("/ab-tests/:id/results", abTestHandler.GetResults)
+		api.GET("/ab-tests/:id/summary", abTestHandler.GetResultsSummary)
+		api.POST("/ab-tests/:id/start", abTestHandler.Start)
+		api.POST("/ab-tests/:id/stop", abTestHandler.Stop)
+		api.POST("/ab-tests/:id/run", abTestHandler.RunIteration)
+		api.DELETE("/ab-tests/:id", abTestHandler.Delete)
+		api.GET("/prompts/:id/ab-tests", abTestHandler.ListByPrompt)
+		api.POST("/prompts/:id/ab-tests", abTestHandler.Create)
 	}
 
 	// 统计 API
