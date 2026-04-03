@@ -43,9 +43,9 @@
             :class="{ filled: hasValue(v) }"
           >
             <label class="var-label">
-              <span class="var-marker">{{</span>
+              <span class="var-marker">&#123;&#123;</span>
               <span class="var-name">{{ v }}</span>
-              <span class="var-marker">}}</span>
+              <span class="var-marker">&#125;&#125;</span>
               <el-icon v-if="hasValue(v)" class="check-icon"><Check /></el-icon>
             </label>
             <el-input

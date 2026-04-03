@@ -9,9 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// HeaderAIProvider is the header key for AI provider identification.
-const HeaderAIProvider = "X-AI-Provider"
-
 // ContextKeyQuotaService is the context key for the QuotaService.
 const ContextKeyQuotaService = "quota_service"
 

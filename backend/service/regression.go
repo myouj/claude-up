@@ -35,25 +35,19 @@ func (s *RegressionService) Detect(promptID uint, oldModel, newModel string) (*R
 		return nil, err
 	}
 
-	oldScore, err := s.scoringSvc.ScorePrompt(prompt.Content)
-	if err != nil {
-		oldScore = &ScoreResult{}
-	}
+	oldScore := s.scoringSvc.Score(&prompt)
 
-	newScore, err := s.scoringSvc.ScorePrompt(prompt.Content)
-	if err != nil {
-		newScore = &ScoreResult{}
-	}
+	newScore := s.scoringSvc.Score(&prompt)
 
 	report := &RegressionReport{
 		PromptID:      promptID,
 		PromptTitle:   prompt.Title,
 		OldModel:      oldModel,
 		NewModel:      newModel,
-		OldScore:      oldScore.Total,
-		NewScore:      newScore.Total,
-		ScoreDelta:    newScore.Total - oldScore.Total,
-		HasRegression: newScore.Total < oldScore.Total,
+		OldScore:      oldScore.Overall,
+		NewScore:      newScore.Overall,
+		ScoreDelta:    newScore.Overall - oldScore.Overall,
+		HasRegression: newScore.Overall < oldScore.Overall,
 		GeneratedAt:   time.Now(),
 	}
 
