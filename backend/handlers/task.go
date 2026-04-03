@@ -173,30 +173,3 @@ func (h *TaskHandler) CancelTask(c *gin.Context) {
 		"message": "Task cancelled successfully",
 	})
 }
-
-// DeleteTask godoc
-// @Summary 删除任务
-// @Tags tasks
-// @Produce json
-// @Param id path int true "任务ID"
-// @Success 200 {object} map[string]interface{} "成功删除任务"
-// @Failure 400 {object} map[string]interface{} "无效的任务ID"
-// @Failure 500 {object} map[string]interface{} "服务器内部错误"
-// @Router /api/tasks/{id} [delete]
-func (h *TaskHandler) DeleteTask(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid task ID"})
-		return
-	}
-
-	if err := h.svc.Delete(uint(id)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "Task deleted successfully",
-	})
-}
