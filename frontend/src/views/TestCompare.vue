@@ -19,8 +19,8 @@
             <el-option v-for="v in versions" :key="v.id" :label="`v${v.version}`" :value="v.id" />
           </el-select>
           <el-select v-model="selectedModel" class="model-select">
-            <el-option label="MiniMax" value="MiniMax-Text-01" />
-            <el-option label="阿里百炼 (Qwen)" value="qwen-turbo" />
+            <el-option label="MiniMax" value="MiniMax-M2.7" />
+            <el-option label="阿里百炼 (Qwen)" value="qwen3.5-plus" />
           </el-select>
           <el-button type="primary" @click="runNewTest" :loading="running">
             <el-icon><Promotion /></el-icon>

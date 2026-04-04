@@ -14,13 +14,13 @@
         </div>
         <div class="right">
           <el-select v-model="selectedModel" placeholder="选择模型" class="model-select">
-            <el-option label="MiniMax" value="MiniMax-Text-01">
+            <el-option label="MiniMax" value="MiniMax-M2.7">
               <div class="model-option">
                 <span>MiniMax</span>
                 <span class="model-desc">高性价比</span>
               </div>
             </el-option>
-            <el-option label="阿里百炼 (Qwen)" value="qwen-turbo">
+            <el-option label="阿里百炼 (Qwen)" value="qwen3.5-plus">
               <div class="model-option">
                 <span>阿里百炼</span>
                 <span class="model-desc">通义千问</span>
@@ -194,7 +194,7 @@ const router = useRouter()
 const route = useRoute()
 
 const promptContent = ref('')
-const selectedModel = ref('MiniMax-Text-01')
+const selectedModel = ref('MiniMax-M2.7')
 const userMessage = ref('')
 const messages = ref([])
 const loading = ref(false)

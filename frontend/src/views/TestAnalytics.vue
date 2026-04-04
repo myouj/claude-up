@@ -13,8 +13,8 @@
         <div class="right">
           <el-select v-model="selectedModel" placeholder="全部模型" class="model-select" clearable>
             <el-option label="全部模型" :value="null" />
-            <el-option label="MiniMax" value="MiniMax-Text-01" />
-            <el-option label="阿里百炼 (Qwen)" value="qwen-turbo" />
+            <el-option label="MiniMax" value="MiniMax-M2.7" />
+            <el-option label="阿里百炼 (Qwen)" value="qwen3.5-plus" />
           </el-select>
           <el-date-picker
             v-model="dateRange"
