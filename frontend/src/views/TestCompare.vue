@@ -180,8 +180,14 @@ const route = useRoute()
 const promptTitle = ref('')
 const versions = ref([])
 const selectedVersionId = ref(null)
-const selectedModel = ref('gpt-4')
+const selectedModel = ref('MiniMax-M2.7')
 const testRecords = ref([])
+
+// Model to provider mapping - easy to extend
+const modelProviderMap = {
+  'MiniMax-M2.7': 'minimax',
+  'qwen3.5-plus': 'alibaba'
+}
 const selectedRecordIds = ref([])
 const loadingRecords = ref(false)
 const running = ref(false)
@@ -261,8 +267,8 @@ const runNewTest = async () => {
     const res = await axios.get(`/api/prompts/${route.params.id}`)
     if (res.data.success) {
       const content = res.data.data.content
-      // Determine provider based on selected model
-      const provider = selectedModel.value === 'MiniMax-M2.7' ? 'minimax' : 'alibaba'
+      // Get provider from model mapping
+      const provider = modelProviderMap[selectedModel.value] || 'minimax'
       const testRes = await axios.post(`/api/prompts/${route.params.id}/test`, {
         content: content,
         provider: provider
