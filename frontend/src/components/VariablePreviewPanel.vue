@@ -100,33 +100,54 @@
           </el-icon>
         </div>
         <div v-show="qualityExpanded" class="quality-cards">
-          <div class="quality-card">
-            <span class="quality-label">Clarity</span>
-            <div class="quality-bar">
-              <div class="quality-fill" :style="{ width: '85%' }"></div>
-            </div>
-            <span class="quality-value">85</span>
+          <div v-if="loadingScore" class="quality-loading">
+            <el-icon class="is-loading"><Loading /></el-icon>
+            <span>计算评分中...</span>
           </div>
-          <div class="quality-card">
-            <span class="quality-label">Complete</span>
-            <div class="quality-bar">
-              <div class="quality-fill" :style="{ width: '72%' }"></div>
+          <template v-else-if="scores">
+            <div class="quality-card">
+              <el-tooltip content="指令清晰度：任务描述明确、无歧义，变量命名规范" placement="top">
+                <span class="quality-label">Clarity</span>
+              </el-tooltip>
+              <div class="quality-bar">
+                <div class="quality-fill" :style="{ width: scores.clarity + '%' }"></div>
+              </div>
+              <span class="quality-value">{{ Math.round(scores.clarity) }}</span>
             </div>
-            <span class="quality-value">72</span>
-          </div>
-          <div class="quality-card">
-            <span class="quality-label">Example</span>
-            <div class="quality-bar">
-              <div class="quality-fill" :style="{ width: '60%' }"></div>
+            <div class="quality-card">
+              <el-tooltip content="约束完整性：输出格式、边界条件、上下文覆盖完整" placement="top">
+                <span class="quality-label">Complete</span>
+              </el-tooltip>
+              <div class="quality-bar">
+                <div class="quality-fill" :style="{ width: scores.completeness + '%' }"></div>
+              </div>
+              <span class="quality-value">{{ Math.round(scores.completeness) }}</span>
             </div>
-            <span class="quality-value">60</span>
-          </div>
-          <div class="quality-card">
-            <span class="quality-label">Role</span>
-            <div class="quality-bar">
-              <div class="quality-fill" :style="{ width: '90%' }"></div>
+            <div class="quality-card">
+              <el-tooltip content="示例质量：Few-shot 示例代表性强，能清晰说明期望输出" placement="top">
+                <span class="quality-label">Example</span>
+              </el-tooltip>
+              <div class="quality-bar">
+                <div class="quality-fill" :style="{ width: scores.example + '%' }"></div>
+              </div>
+              <span class="quality-value">{{ Math.round(scores.example) }}</span>
             </div>
-            <span class="quality-value">90</span>
+            <div class="quality-card">
+              <el-tooltip content="角色定义：Agent persona 具体稳定，定义清晰的身份和能力" placement="top">
+                <span class="quality-label">Role</span>
+              </el-tooltip>
+              <div class="quality-bar">
+                <div class="quality-fill" :style="{ width: scores.role + '%' }"></div>
+              </div>
+              <span class="quality-value">{{ Math.round(scores.role) }}</span>
+            </div>
+          </template>
+          <div v-else class="quality-actions">
+            <el-button size="small" type="primary" @click="fetchScore" :disabled="!promptId">
+              <el-icon><DataAnalysis /></el-icon>
+              <span>开始评分</span>
+            </el-button>
+            <span v-if="!promptId" class="quality-hint">保存后即可评分</span>
           </div>
         </div>
       </div>
@@ -135,18 +156,26 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Loading } from '@element-plus/icons-vue'
+import axios from 'axios'
 
 const props = defineProps({
   content: {
     type: String,
     default: ''
+  },
+  promptId: {
+    type: [Number, String],
+    default: null
   }
 })
 
 const variableValues = ref({})
 const qualityExpanded = ref(true)
+const scores = ref(null)
+const loadingScore = ref(false)
 
 // Extract unique variable names from content
 const variables = computed(() => {
@@ -209,6 +238,25 @@ const handleCopy = () => {
   if (renderedContent.value) {
     navigator.clipboard.writeText(renderedContent.value)
     ElMessage.success('渲染结果已复制到剪贴板')
+  }
+}
+
+const fetchScore = async () => {
+  if (!props.promptId) {
+    scores.value = null
+    return
+  }
+  loadingScore.value = true
+  try {
+    const res = await axios.get(`/api/prompts/${props.promptId}/score`)
+    if (res.data.success) {
+      scores.value = res.data.data
+    }
+  } catch (err) {
+    console.error('Failed to fetch score:', err)
+    scores.value = null
+  } finally {
+    loadingScore.value = false
   }
 }
 
@@ -453,6 +501,7 @@ defineExpose({
   font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
   min-width: 56px;
+  cursor: help;
 }
 
 .quality-bar {
@@ -475,5 +524,33 @@ defineExpose({
   color: var(--color-text-primary);
   min-width: 24px;
   text-align: right;
+}
+
+.quality-loading,
+.quality-no-data {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-4);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.quality-loading .el-icon {
+  font-size: 16px;
+}
+
+.quality-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-4);
+}
+
+.quality-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
 }
 </style>

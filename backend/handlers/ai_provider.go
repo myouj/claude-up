@@ -455,6 +455,17 @@ func (p *MiniMaxProvider) Call(messages []map[string]string, model string) (stri
 
 // ----- Alibaba (阿里百炼) -----
 
+type QwenResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+	Usage struct {
+		TotalTokens int `json:"total_tokens"`
+	} `json:"usage"`
+}
+
 type AlibabaProvider struct {
 	baseURL string
 	model   string
@@ -488,11 +499,8 @@ func (p *AlibabaProvider) Call(messages []map[string]string, model string) (stri
 
 	reqBody := map[string]interface{}{
 		"model": model,
-		"input": map[string]interface{}{
-			"messages": messages,
-		},
-		"parameters": map[string]interface{}{
-			"result_format": "message",
+		"messages": []map[string]interface{}{
+			{"role": "user", "content": messages[0]["content"]},
 		},
 	}
 
@@ -524,21 +532,15 @@ func (p *AlibabaProvider) Call(messages []map[string]string, model string) (stri
 		return "", 0, fmt.Errorf("alibaba error: %s", http.StatusText(resp.StatusCode))
 	}
 
-	var result map[string]interface{}
+	var result QwenResponse
 	if err := json.Unmarshal(body, &result); err != nil {
 		return "", 0, fmt.Errorf("alibaba response parse error")
 	}
 
-	if output, ok := result["output"].(map[string]interface{}); ok {
-		if choices, ok := output["choices"].([]interface{}); ok && len(choices) > 0 {
-			if choice, ok := choices[0].(map[string]interface{}); ok {
-				if msg, ok := choice["message"].(map[string]interface{}); ok {
-					if content, ok := msg["content"].(string); ok {
-						return content, 0, nil
-					}
-				}
-			}
-		}
+	choices := result.Choices
+	if len(choices) > 0 {
+		message := choices[0].Message
+		return message.Content, result.Usage.TotalTokens, nil
 	}
 	return "", 0, fmt.Errorf("unexpected alibaba response format")
 }

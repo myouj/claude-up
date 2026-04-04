@@ -39,10 +39,6 @@
               <el-icon><Translate /></el-icon>
               <span class="btn-text">翻译</span>
             </el-button>
-            <el-button class="tool-btn" @click="goToTest">
-              <el-icon><ChatDotRound /></el-icon>
-              <span class="btn-text">测试</span>
-            </el-button>
             <el-button class="tool-btn" @click="goToTestCompare">
               <el-icon><Connection /></el-icon>
               <span class="btn-text">对比测试</span>
@@ -176,7 +172,7 @@
 
         <!-- Variable Preview Panel (40%) -->
         <el-aside width="40%" class="preview-panel">
-          <VariablePreviewPanel :content="prompt.content" />
+          <VariablePreviewPanel :content="prompt.content" :prompt-id="prompt.id" />
         </el-aside>
       </el-container>
     </el-container>
@@ -309,7 +305,6 @@ You are a [role/expertise]
 const goBack = () => router.back()
 const goToVersions = () => router.push(`/prompts/${route.params.id}/versions`)
 const goToCompare = () => router.push(`/prompts/${route.params.id}/compare`)
-const goToTest = () => router.push(`/prompts/${route.params.id}/test`)
 const goToTestCompare = () => router.push(`/prompts/${route.params.id}/test-compare`)
 const goToOptimize = () => router.push(`/prompts/${route.params.id}/optimize`)
 const goToTranslate = () => router.push(`/prompts/${route.params.id}/translate`)

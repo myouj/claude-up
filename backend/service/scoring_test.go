@@ -18,26 +18,26 @@ func TestScoringService_ScoreClarity(t *testing.T) {
 		{
 			name:    "good prompt with variables",
 			content: "You are a helpful assistant. {{user_name}} please help with {{task}}. ## Output Format: JSON",
-			wantMin: 0.5,
-			wantMax: 1.0,
+			wantMin: 50,
+			wantMax: 100,
 		},
 		{
 			name:    "short prompt without variables",
 			content: "Help me",
-			wantMin: 0.3,
-			wantMax: 0.7,
+			wantMin: 30,
+			wantMax: 70,
 		},
 		{
 			name:    "prompt with properly formatted variables",
 			content: "Hello {{name}}, your email is {{email}}. Please confirm.",
-			wantMin: 0.5,
-			wantMax: 1.0,
+			wantMin: 50,
+			wantMax: 100,
 		},
 		{
 			name:    "prompt with poorly formatted variables",
 			content: "Hello {{ name }}, your email is {{ email }}. Please confirm.",
-			wantMin: 0.4,
-			wantMax: 0.8,
+			wantMin: 40,
+			wantMax: 80,
 		},
 	}
 
@@ -59,8 +59,8 @@ func TestScoringService_ScoreCompleteness(t *testing.T) {
 	}
 
 	got := svc.ScoreCompleteness(prompt)
-	if got < 0.5 || got > 1.0 {
-		t.Errorf("ScoreCompleteness() = %v, want between 0.5 and 1.0", got)
+	if got < 50 || got > 100 {
+		t.Errorf("ScoreCompleteness() = %v, want between 50 and 100", got)
 	}
 }
 
@@ -72,8 +72,8 @@ func TestScoringService_ScoreExample(t *testing.T) {
 	}
 
 	got := svc.ScoreExample(prompt)
-	if got < 0.5 || got > 1.0 {
-		t.Errorf("ScoreExample() = %v, want between 0.5 and 1.0", got)
+	if got < 50 || got > 100 {
+		t.Errorf("ScoreExample() = %v, want between 50 and 100", got)
 	}
 }
 
@@ -89,14 +89,14 @@ func TestScoringService_ScoreRole(t *testing.T) {
 		{
 			name:    "with role definition",
 			content: "You are an expert developer with 10 years of experience. You are capable of...",
-			wantMin: 0.7,
-			wantMax: 1.0,
+			wantMin: 70,
+			wantMax: 100,
 		},
 		{
 			name:    "without role definition",
 			content: "Help me with my task",
-			wantMin: 0.2,
-			wantMax: 0.5,
+			wantMin: 20,
+			wantMax: 50,
 		},
 	}
 
@@ -119,19 +119,19 @@ func TestScoringService_Score(t *testing.T) {
 
 	result := svc.Score(prompt)
 
-	if result.Clarity < 0 || result.Clarity > 1 {
+	if result.Clarity < 0 || result.Clarity > 100 {
 		t.Errorf("Clarity score out of range: %v", result.Clarity)
 	}
-	if result.Completeness < 0 || result.Completeness > 1 {
+	if result.Completeness < 0 || result.Completeness > 100 {
 		t.Errorf("Completeness score out of range: %v", result.Completeness)
 	}
-	if result.Example < 0 || result.Example > 1 {
+	if result.Example < 0 || result.Example > 100 {
 		t.Errorf("Example score out of range: %v", result.Example)
 	}
-	if result.Role < 0 || result.Role > 1 {
+	if result.Role < 0 || result.Role > 100 {
 		t.Errorf("Role score out of range: %v", result.Role)
 	}
-	if result.Overall < 0 || result.Overall > 1 {
+	if result.Overall < 0 || result.Overall > 100 {
 		t.Errorf("Overall score out of range: %v", result.Overall)
 	}
 }
@@ -218,16 +218,16 @@ func TestScoringService_CalculateWeightedScore(t *testing.T) {
 	}
 
 	scores := map[string]float64{
-		"clarity":      0.8,
-		"completeness": 0.9,
-		"example":      0.7,
-		"role":         0.85,
+		"clarity":      80,
+		"completeness": 90,
+		"example":      70,
+		"role":         85,
 	}
 
-	// Expected: 0.30*0.8 + 0.30*0.9 + 0.25*0.7 + 0.15*0.85 = 0.24 + 0.27 + 0.175 + 0.1275 = 0.8125
+	// Expected: 0.30*80 + 0.30*90 + 0.25*70 + 0.15*85 = 24 + 27 + 17.5 + 12.75 = 81.25
 	got := svc.CalculateWeightedScore(weights, scores)
-	expected := 0.81
-	if got < expected-0.01 || got > expected+0.01 {
+	expected := 81.25
+	if got < expected-1 || got > expected+1 {
 		t.Errorf("CalculateWeightedScore() = %v, want approximately %v", got, expected)
 	}
 }

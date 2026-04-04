@@ -34,7 +34,7 @@ func (s *ScoringService) Score(prompt *models.Prompt) *ScoreResult {
 	example := s.ScoreExample(prompt)
 	role := s.ScoreRole(prompt.Content)
 
-	// Calculate weighted overall
+	// Calculate weighted overall (scores are already 0-100)
 	overall := clarity*0.30 + completeness*0.30 + example*0.25 + role*0.15
 
 	return &ScoreResult{
@@ -42,7 +42,7 @@ func (s *ScoringService) Score(prompt *models.Prompt) *ScoreResult {
 		Completeness: completeness,
 		Example:      example,
 		Role:         role,
-		Overall:      math.Round(overall*100) / 100,
+		Overall:      math.Round(overall),
 		Breakdown: map[string]interface{}{
 			"clarity":      s.clarityBreakdown(prompt.Content),
 			"completeness": s.completenessBreakdown(prompt),
@@ -128,7 +128,7 @@ func (s *ScoringService) clarityBreakdown(content string) map[string]interface{}
 	score = math.Max(0, math.Min(1, score))
 
 	return map[string]interface{}{
-		"score":              math.Round(score*100) / 100,
+		"score":              math.Round(score * 100),
 		"placeholder_count":  placeholderCount,
 		"length":             length,
 		"format_score":       formatScore,
@@ -208,7 +208,7 @@ func (s *ScoringService) completenessBreakdown(prompt *models.Prompt) map[string
 	normalizedScore := math.Min(1.0, score)
 
 	return map[string]interface{}{
-		"score":        math.Round(normalizedScore*100) / 100,
+		"score":        math.Round(normalizedScore * 100),
 		"has_role":     strings.Contains(strings.ToLower(content), "you are") || strings.Contains(strings.ToLower(content), "act as"),
 		"has_task":     strings.Contains(strings.ToLower(content), "task") || strings.Contains(strings.ToLower(content), "help"),
 		"has_format":   strings.Contains(strings.ToLower(content), "output") || strings.Contains(strings.ToLower(content), "format"),
@@ -269,7 +269,7 @@ func (s *ScoringService) exampleBreakdown(prompt *models.Prompt) map[string]inte
 	}
 
 	return map[string]interface{}{
-		"score":          math.Round(score*100) / 100,
+		"score":          math.Round(score * 100),
 		"example_count":  exampleCount,
 		"code_blocks":    codeBlockCount,
 	}
@@ -329,7 +329,7 @@ func (s *ScoringService) roleBreakdown(content string) map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"score":        math.Round(score*100) / 100,
+		"score":        math.Round(score * 100),
 		"keywords":     foundKeywords,
 		"has_expertise": strings.Contains(lower, "expertise") || strings.Contains(lower, "experience"),
 		"has_capabilities": strings.Contains(lower, "capable") || strings.Contains(lower, "abilities"),
@@ -419,7 +419,7 @@ func (s *ScoringService) CalculateWeightedScore(weights models.EvalWeights, scor
 		weights.Example*scores["example"] +
 		weights.Role*scores["role"]
 
-	return math.Round(total*100) / 100
+	return math.Round(total)
 }
 
 // MarshalWeights converts EvalWeights to JSON string

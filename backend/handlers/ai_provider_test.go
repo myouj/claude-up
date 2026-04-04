@@ -353,7 +353,7 @@ func TestMiniMaxProvider_Call_Success(t *testing.T) {
 	messages := []map[string]string{
 		{"role": "USER", "text": "Hello"},
 	}
-	response, tokens, err := provider.Call(messages, "MiniMax-Text-01")
+	response, tokens, err := provider.Call(messages, "MiniMax-M2.7")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -372,7 +372,7 @@ func TestMiniMaxProvider_Call_Error(t *testing.T) {
 	defer server.Close()
 
 	provider := &MiniMaxProvider{baseURL: server.URL}
-	_, _, err := provider.Call([]map[string]string{{"role": "USER", "text": "test"}}, "MiniMax-Text-01")
+	_, _, err := provider.Call([]map[string]string{{"role": "USER", "text": "test"}}, "MiniMax-M2.7")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -386,7 +386,7 @@ func TestMiniMaxProvider_Call_InvalidJSON(t *testing.T) {
 	defer server.Close()
 
 	provider := &MiniMaxProvider{baseURL: server.URL}
-	_, _, err := provider.Call([]map[string]string{{"role": "USER", "text": "test"}}, "MiniMax-Text-01")
+	_, _, err := provider.Call([]map[string]string{{"role": "USER", "text": "test"}}, "MiniMax-M2.7")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -403,7 +403,7 @@ func TestMiniMaxProvider_Call_UnexpectedFormat(t *testing.T) {
 	defer server.Close()
 
 	provider := &MiniMaxProvider{baseURL: server.URL}
-	_, _, err := provider.Call([]map[string]string{{"role": "USER", "text": "test"}}, "MiniMax-Text-01")
+	_, _, err := provider.Call([]map[string]string{{"role": "USER", "text": "test"}}, "MiniMax-M2.7")
 	if err == nil {
 		t.Fatal("expected error")
 	}
