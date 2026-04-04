@@ -19,8 +19,8 @@ type TestRecord struct {
 
 type TestRequest struct {
 	Content  string    `json:"content" binding:"required"`
-	Model    string    `json:"model" binding:"required"`
-	Provider string    `json:"provider"` // defaults to "openai"
+	Model    string    `json:"model"` // controlled by backend based on provider
+	Provider string    `json:"provider"`
 	Messages []Message `json:"messages"`
 }
 

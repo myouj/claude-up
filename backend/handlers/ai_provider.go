@@ -15,6 +15,7 @@ import (
 type AIProvider interface {
 	Name() string
 	Call(messages []map[string]string, model string) (response string, tokens int, err error)
+	DefaultModel() string
 }
 
 // ----- OpenAI -----
@@ -123,6 +124,13 @@ func NewClaudeProvider() *ClaudeProvider {
 
 func (p *ClaudeProvider) Name() string { return "claude" }
 
+func (p *ClaudeProvider) DefaultModel() string {
+	if p.model == "" {
+		return "claude-3-5-sonnet-20241022"
+	}
+	return p.model
+}
+
 func (p *ClaudeProvider) Call(messages []map[string]string, model string) (string, int, error) {
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	baseURL := p.baseURL
@@ -227,6 +235,13 @@ func NewGeminiProvider() *GeminiProvider {
 
 func (p *GeminiProvider) Name() string { return "gemini" }
 
+func (p *GeminiProvider) DefaultModel() string {
+	if p.model == "" {
+		return "gemini-2.0-flash"
+	}
+	return p.model
+}
+
 func (p *GeminiProvider) Call(messages []map[string]string, model string) (string, int, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	baseURL := p.baseURL
@@ -320,6 +335,34 @@ type MiniMaxProvider struct {
 	model   string
 }
 
+type Role string
+
+const (
+	RoleUser       Role = "user"
+	RoleAssistant  Role = "assistant"
+	RoleSystem     Role = "system"
+	RoleUserSystem Role = "user_system"
+)
+
+type MiniMaxMessage struct {
+	Role    Role   `json:"role"`
+	Content string `json:"content,omitempty"`
+}
+
+type MiniMaxRequest struct {
+	Model               string           `json:"model"`
+	MaxCompletionTokens int              `json:"max_completion_tokens,omitempty"`
+	Messages            []MiniMaxMessage `json:"messages"`
+}
+
+type MiniMaxResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+}
+
 func NewMiniMaxProvider() *MiniMaxProvider {
 	return &MiniMaxProvider{
 		baseURL: os.Getenv("MINIMAX_BASE_URL"),
@@ -329,47 +372,51 @@ func NewMiniMaxProvider() *MiniMaxProvider {
 
 func (p *MiniMaxProvider) Name() string { return "minimax" }
 
+func (p *MiniMaxProvider) DefaultModel() string {
+	if p.model == "" {
+		return "MiniMax-M2.7"
+	}
+	return p.model
+}
+
 func (p *MiniMaxProvider) Call(messages []map[string]string, model string) (string, int, error) {
 	apiKey := os.Getenv("MINIMAX_API_KEY")
-	groupID := os.Getenv("MINIMAX_GROUP_ID")
 	baseURL := p.baseURL
 	if baseURL == "" {
-		baseURL = "https://api.minimax.chat/v1/text/chatcompletion_v2"
+		baseURL = "https://api.minimaxi.com/v1"
 	}
+
 	if model == "" {
-		model = p.model
-	}
-	if model == "" {
-		model = "MiniMax-Text-01"
+		model = p.DefaultModel()
 	}
 
 	// Convert messages
-	var minimaxMessages []map[string]string
+	var minimaxMessages []MiniMaxMessage
 	for _, m := range messages {
-		role := "USER"
+		role := "user"
 		if m["role"] == "assistant" {
-			role = "BOT"
+			role = "assistant"
 		} else if m["role"] == "system" {
-			role = "SYSTEM"
+			role = "system"
 		}
-		minimaxMessages = append(minimaxMessages, map[string]string{
-			"role":        role,
-			"sender_type": role,
-			"text":        m["content"],
+		minimaxMessages = append(minimaxMessages, MiniMaxMessage{
+			Role:    Role(role),
+			Content: m["content"],
 		})
 	}
 
-	reqBody := map[string]interface{}{
-		"model":              model,
-		"tokens_to_generate": 4096,
-		"messages":           minimaxMessages,
+	reqBody := MiniMaxRequest{
+		Model:               model,
+		MaxCompletionTokens: 4096,
+		Messages:            minimaxMessages,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", 0, fmt.Errorf("minimax request marshal error: %w", err)
 	}
-	url := fmt.Sprintf("%s?GroupId=%s", baseURL, groupID)
+	url := baseURL + "/text/chatcompletion_v2"
+
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", 0, err
@@ -388,7 +435,7 @@ func (p *MiniMaxProvider) Call(messages []map[string]string, model string) (stri
 	if err != nil {
 		return "", 0, fmt.Errorf("minimax response read error: %w", err)
 	}
-	var result map[string]interface{}
+	var result MiniMaxResponse
 	if err := json.Unmarshal(body, &result); err != nil {
 		return "", 0, fmt.Errorf("minimax response parse error")
 	}
@@ -396,17 +443,12 @@ func (p *MiniMaxProvider) Call(messages []map[string]string, model string) (stri
 	if resp.StatusCode >= 400 {
 		return "", 0, fmt.Errorf("minimax error: %s", http.StatusText(resp.StatusCode))
 	}
-
-	if choices, ok := result["choices"].([]interface{}); ok && len(choices) > 0 {
-		if choice, ok := choices[0].(map[string]interface{}); ok {
-			if msg, ok := choice["messages"].([]interface{}); ok && len(msg) > 0 {
-				if m, ok := msg[0].(map[string]interface{}); ok {
-					if text, ok := m["text"].(string); ok {
-						return text, 0, nil
-					}
-				}
-			}
-		}
+	choices := result.Choices
+	if len(choices) > 0 {
+		choice := choices[0]
+		msg := choice.Message
+		content := msg.Content
+		return content, 0, nil
 	}
 	return "", 0, fmt.Errorf("unexpected minimax response format")
 }
@@ -431,20 +473,17 @@ func (p *AlibabaProvider) DefaultModel() string {
 	if p.model != "" {
 		return p.model
 	}
-	return "qwen-turbo"
+	return "qwen3.5-plus"
 }
 
 func (p *AlibabaProvider) Call(messages []map[string]string, model string) (string, int, error) {
 	apiKey := os.Getenv("ALIBABA_API_KEY")
 	baseURL := p.baseURL
 	if baseURL == "" {
-		baseURL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+		baseURL = "https://coding.dashscope.aliyuncs.com/v1"
 	}
 	if model == "" {
-		model = p.model
-	}
-	if model == "" {
-		model = "qwen-turbo"
+		model = p.DefaultModel()
 	}
 
 	reqBody := map[string]interface{}{
@@ -461,7 +500,7 @@ func (p *AlibabaProvider) Call(messages []map[string]string, model string) (stri
 	if err != nil {
 		return "", 0, fmt.Errorf("alibaba request marshal error: %w", err)
 	}
-	url := baseURL + "/text/generation"
+	url := baseURL + "/chat/completions"
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", 0, err
@@ -555,7 +594,7 @@ type ModelInfo struct {
 
 var availableModels = []ModelInfo{
 	// MiniMax
-	{"minimax", "MiniMax-Text-01", 0.99, 0.99},
+	{"minimax", "MiniMax-M2.7", 0.99, 0.99},
 	// Alibaba (阿里百炼)
 	{"alibaba", "qwen-turbo", 0.00, 0.00},
 	{"alibaba", "qwen-plus", 0.00, 0.00},

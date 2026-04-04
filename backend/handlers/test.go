@@ -39,11 +39,17 @@ func (h *TestHandler) Test(c *gin.Context) {
 
 	providerName := strings.ToLower(input.Provider)
 	if providerName == "" {
-		providerName = "openai"
+		providerName = "minimax"
 	}
 
 	provider := getProvider(providerName)
 	apiKey := getProviderAPIKey(providerName)
+
+	// Use provider's default model if not specified
+	model := input.Model
+	if model == "" {
+		model = provider.DefaultModel()
+	}
 
 	var response string
 	var tokens int
@@ -66,8 +72,14 @@ func (h *TestHandler) Test(c *gin.Context) {
 			})
 		}
 
-		response, tokens, err = provider.Call(messages, input.Model)
+		response, tokens, err = provider.Call(messages, model)
 		if err != nil {
+			middleware.GetTraceLogger(c).Error("AI provider request failed", map[string]interface{}{
+				"error":     err.Error(),
+				"prompt_id": promptID,
+				"provider":  providerName,
+				"model":     model,
+			})
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "AI provider request failed"})
 			return
 		}
@@ -76,7 +88,7 @@ func (h *TestHandler) Test(c *gin.Context) {
 	record := models.TestRecord{
 		PromptID:   uint(promptID),
 		VersionID:  getLatestVersionID(h.db, uint(promptID)),
-		Model:      input.Model,
+		Model:      model,
 		Provider:   provider.Name(),
 		PromptText: input.Content,
 		Response:   response,
@@ -85,7 +97,7 @@ func (h *TestHandler) Test(c *gin.Context) {
 	}
 	h.db.Create(&record)
 	if h.activityHandler != nil {
-		h.activityHandler.Log("test", record.ID, "tested", fmt.Sprintf(`{"prompt_id": %d, "model": "%s", "provider": "%s"}`, promptID, input.Model, provider.Name()))
+		h.activityHandler.Log("test", record.ID, "tested", fmt.Sprintf(`{"prompt_id": %d, "model": "%s", "provider": "%s"}`, promptID, model, provider.Name()))
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -135,10 +147,10 @@ func (h *TestHandler) Optimize(c *gin.Context) {
 		optimized, _, err = provider.Call(messages, input.Model)
 		if err != nil {
 			middleware.GetTraceLogger(c).Error("AI provider request failed", map[string]interface{}{
-				"error": err.Error(),
+				"error":     err.Error(),
 				"prompt_id": promptID,
-				"provider": providerName,
-				"model": input.Model,
+				"provider":  providerName,
+				"model":     input.Model,
 			})
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "AI provider request failed"})
 			return

@@ -261,9 +261,11 @@ const runNewTest = async () => {
     const res = await axios.get(`/api/prompts/${route.params.id}`)
     if (res.data.success) {
       const content = res.data.data.content
+      // Determine provider based on selected model
+      const provider = selectedModel.value === 'MiniMax-M2.7' ? 'minimax' : 'alibaba'
       const testRes = await axios.post(`/api/prompts/${route.params.id}/test`, {
         content: content,
-        model: selectedModel.value
+        provider: provider
       })
       if (testRes.data.success) {
         ElMessage.success('测试完成')
