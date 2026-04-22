@@ -497,11 +497,24 @@ func (p *AlibabaProvider) Call(messages []map[string]string, model string) (stri
 		model = p.DefaultModel()
 	}
 
+	// Convert all messages, mapping roles correctly
+	alibabaMessages := make([]map[string]interface{}, 0, len(messages))
+	for _, m := range messages {
+		role := "user"
+		if m["role"] == "system" {
+			role = "system"
+		} else if m["role"] == "assistant" {
+			role = "assistant"
+		}
+		alibabaMessages = append(alibabaMessages, map[string]interface{}{
+			"role":    role,
+			"content": m["content"],
+		})
+	}
+
 	reqBody := map[string]interface{}{
-		"model": model,
-		"messages": []map[string]interface{}{
-			{"role": "user", "content": messages[0]["content"]},
-		},
+		"model":    model,
+		"messages": alibabaMessages,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -549,12 +562,18 @@ func (p *AlibabaProvider) Call(messages []map[string]string, model string) (stri
 
 func getProvider(name string) AIProvider {
 	switch strings.ToLower(name) {
+	case "openai", "gpt":
+		return NewOpenAIProvider()
 	case "minimax":
 		return NewMiniMaxProvider()
 	case "alibaba", "qwen", "dashscope":
 		return NewAlibabaProvider()
+	case "claude", "anthropic":
+		return NewClaudeProvider()
+	case "gemini", "google", "googleai":
+		return NewGeminiProvider()
 	default:
-		return NewMiniMaxProvider()
+		return NewOpenAIProvider()
 	}
 }
 
