@@ -292,6 +292,19 @@
             maxlength="5000"
           />
         </el-form-item>
+        <div class="prefill-row">
+          <el-button
+            type="info"
+            :loading="prefillLoading"
+            @click="handlePrefill"
+            :disabled="!newPrompt.title"
+            plain
+          >
+            <el-icon v-if="!prefillLoading"><MagicStick /></el-icon>
+            {{ prefillLoading ? 'AI 填充中...' : '⚡ AI 填充' }}
+          </el-button>
+          <span v-if="!newPrompt.title" class="prefill-hint">请先输入标题</span>
+        </div>
         <el-form-item label="描述">
           <el-input
             v-model="newPrompt.description"
@@ -405,7 +418,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Collection, Menu } from '@element-plus/icons-vue'
+import { Search, Collection, Menu, MagicStick } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const prompts = ref([])
@@ -413,6 +426,7 @@ const searchKeyword = ref('')
 const activeCategory = ref('')
 const showCreateDialog = ref(false)
 const showImportDialog = ref(false)
+const prefillLoading = ref(false)
 const showTemplateLibrary = ref(false)
 const showSidebar = ref(false)
 const currentPage = ref(1)
@@ -645,9 +659,33 @@ const handleCreate = async () => {
       showCreateDialog.value = false
       newPrompt.value = { title: '', content: '', description: '', category: '', tags: [] }
       fetchPrompts()
+      router.push(`/prompts/${res.data.data.id}`)
     }
   } catch (err) {
     ElMessage.error('创建失败')
+  }
+}
+
+const handlePrefill = async () => {
+  if (!newPrompt.value.title) {
+    ElMessage.warning('请先输入标题')
+    return
+  }
+  prefillLoading.value = true
+  try {
+    const res = await axios.post('/api/prompts/prefill', { title: newPrompt.value.title })
+    if (res.data.success && res.data.data) {
+      const d = res.data.data
+      if (d.content) newPrompt.value.content = d.content
+      if (d.description) newPrompt.value.description = d.description
+      if (d.category) newPrompt.value.category = d.category
+      if (d.tags && d.tags.length > 0) newPrompt.value.tags = d.tags
+      ElMessage.success('AI 填充成功，请确认内容后创建')
+    }
+  } catch (err) {
+    ElMessage.error('AI 填充失败，请稍后重试或手动填写')
+  } finally {
+    prefillLoading.value = false
   }
 }
 
@@ -1048,6 +1086,18 @@ watch(searchKeyword, (val) => {
 
 .full-width {
   width: 100%;
+}
+
+.prefill-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-4);
+}
+
+.prefill-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
 }
 
 /* Dropdown menu items */

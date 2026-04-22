@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -453,6 +455,143 @@ func (h *PromptHandler) Import(c *gin.Context) {
 		Failed:     failed,
 		TotalCount: len(payload.Prompts),
 	})
+}
+
+// ----- Prefill -----
+
+type PrefillRequest struct {
+	Title string `json:"title" binding:"required"`
+	Model string `json:"model"`
+}
+
+type PrefillResponse struct {
+	Content     string   `json:"content"`
+	Description string   `json:"description"`
+	Category    string   `json:"category"`
+	Tags        []string `json:"tags"`
+}
+
+func (h *PromptHandler) Prefill(c *gin.Context) {
+	var input PrefillRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "标题不能为空"})
+		return
+	}
+
+	providerName := "minimax"
+	model := input.Model
+	if model == "" {
+		model = "MiniMax-M2.7"
+	}
+
+	provider := getProvider(providerName)
+	apiKey := os.Getenv("MINIMAX_API_KEY")
+
+	var result PrefillResponse
+	if apiKey == "" {
+		result = mockPrefillResponse(input.Title)
+	} else {
+		systemPrompt := buildPrefillSystemPrompt(input.Title)
+		messages := []map[string]string{
+			{"role": "system", "content": systemPrompt},
+			{"role": "user", "content": input.Title},
+		}
+		response, _, err := provider.Call(messages, model)
+		if err != nil {
+			middleware.GetTraceLogger(c).Error("AI prefill request failed", map[string]interface{}{
+				"error": err.Error(),
+				"title": input.Title,
+			})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "AI 填充失败，请稍后重试"})
+			return
+		}
+		result = parsePrefillResponse(response)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    result,
+	})
+}
+
+func buildPrefillSystemPrompt(title string) string {
+	return `You are an expert at creating structured prompts from a title.
+Given a title: "` + title + `"
+Generate a complete, well-structured prompt with:
+1. **content**: The main prompt body with role definition, task, context, output format, and constraints
+2. **description**: A brief 1-sentence description of this prompt's purpose (in Chinese)
+3. **category**: A single category name (in Chinese, one of: 代码开发, 数据分析, 文档写作, 角色扮演, 翻译, 总结归纳, 问答助手, 其他)
+4. **tags**: 2-3 short tags in Chinese, as a JSON array
+
+Return ONLY a valid JSON object with keys: content, description, category, tags
+Example output:
+{"content": "## Role\nYou are...", "description": "用于代码审查的提示词", "category": "代码开发", "tags": ["代码审查", "review"]}`
+}
+
+func mockPrefillResponse(title string) PrefillResponse {
+	category := "其他"
+	var tags []string
+
+	lower := strings.ToLower(title)
+	switch {
+	case strings.Contains(lower, "code") || strings.Contains(lower, "代码") || strings.Contains(lower, "review") || strings.Contains(lower, "审查") || strings.Contains(lower, "debug"):
+		category = "代码开发"
+		tags = []string{"代码", "开发"}
+	case strings.Contains(lower, "data") || strings.Contains(lower, "数据") || strings.Contains(lower, "分析") || strings.Contains(lower, "统计"):
+		category = "数据分析"
+		tags = []string{"数据", "分析"}
+	case strings.Contains(lower, "write") || strings.Contains(lower, "写作") || strings.Contains(lower, "文档") || strings.Contains(lower, "report"):
+		category = "文档写作"
+		tags = []string{"文档", "写作"}
+	case strings.Contains(lower, "role") || strings.Contains(lower, "角色") || strings.Contains(lower, "扮演"):
+		category = "角色扮演"
+		tags = []string{"角色", "扮演"}
+	case strings.Contains(lower, "translate") || strings.Contains(lower, "翻译"):
+		category = "翻译"
+		tags = []string{"翻译"}
+	case strings.Contains(lower, "summar") || strings.Contains(lower, "总结") || strings.Contains(lower, "摘要"):
+		category = "总结归纳"
+		tags = []string{"总结", "归纳"}
+	case strings.Contains(lower, "qa") || strings.Contains(lower, "问答") || strings.Contains(lower, "question") || strings.Contains(lower, "answer"):
+		category = "问答助手"
+		tags = []string{"问答"}
+	default:
+		tags = []string{"通用"}
+	}
+
+	content := "## Role\nYou are a helpful AI assistant" +
+		"\n\n## Task\n" + title +
+		"\n\n## Context\nProvide relevant background information and context for the task." +
+		"\n\n## Output Format\nRespond in a clear, structured format as appropriate."
+
+	return PrefillResponse{
+		Content:     content,
+		Description: "用于" + title + "的提示词",
+		Category:    category,
+		Tags:        tags,
+	}
+}
+
+func parsePrefillResponse(raw string) PrefillResponse {
+	var result PrefillResponse
+	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, "```") {
+		lines := strings.SplitN(raw, "\n", 3)
+		if len(lines) >= 3 {
+			raw = strings.TrimSuffix(lines[2], "```")
+		}
+	}
+	raw = strings.TrimSpace(raw)
+
+	if err := json.Unmarshal([]byte(raw), &result); err == nil {
+		return result
+	}
+	return PrefillResponse{
+		Content:     raw,
+		Description: "",
+		Category:    "其他",
+		Tags:        []string{},
+	}
 }
 
 func parseTags(tags string) []string {

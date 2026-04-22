@@ -153,6 +153,7 @@ func main() {
 		api.POST("/prompts/:id/clone", promptHandler.Clone)
 		api.GET("/prompts/export", promptHandler.Export)
 		api.POST("/prompts/import", promptHandler.Import)
+		api.POST("/prompts/prefill", promptHandler.Prefill)
 
 		// 版本管理
 		api.GET("/prompts/:id/versions", versionHandler.List)
