@@ -99,9 +99,8 @@ const navigateTo = (path) => {
   position: sticky;
   top: 0;
   z-index: var(--z-dropdown);
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
-  box-shadow: var(--shadow-sm);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-border);
 }
 
 .top-nav-container {
@@ -126,21 +125,23 @@ const navigateTo = (path) => {
 }
 
 .nav-brand:hover {
-  background: var(--color-bg);
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .brand-name {
   font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
   color: var(--color-text-primary);
-  letter-spacing: -0.02em;
 }
 
 .nav-menu {
   flex: 1;
   border-bottom: none;
   background: transparent;
-  --el-menu-hover-bg-color: var(--color-primary-light);
+  display: flex;
+  align-items: center;
+  --el-menu-hover-bg-color: rgba(0, 0, 0, 0.04);
   --el-menu-hover-text-color: var(--color-primary);
   --el-menu-active-color: var(--color-primary);
 }
@@ -154,10 +155,12 @@ const navigateTo = (path) => {
   border-bottom: none;
   font-weight: var(--font-weight-medium);
   font-size: var(--font-size-base);
+  display: flex;
+  align-items: center;
 }
 
 .nav-menu :deep(.el-menu-item.is-active) {
-  background: var(--color-primary-light);
+  background: rgba(0, 0, 0, 0.06);
   color: var(--color-primary);
 }
 
@@ -181,6 +184,6 @@ const navigateTo = (path) => {
 
 .nav-actions .el-button:hover {
   color: var(--color-primary);
-  background: var(--color-primary-light);
+  background: rgba(0, 0, 0, 0.04);
 }
 </style>

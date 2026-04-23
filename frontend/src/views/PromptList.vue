@@ -7,15 +7,6 @@
             <el-button class="mobile-menu-btn" @click="showSidebar = true">
               <el-icon><Menu /></el-icon>
             </el-button>
-            <div class="brand">
-              <div class="logo">
-                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                  <rect width="28" height="28" rx="8" fill="var(--color-primary)"/>
-                  <path d="M8 10h12M8 14h8M8 18h10" stroke="white" stroke-width="2" stroke-linecap="round"/>
-                </svg>
-              </div>
-              <h1>PromptVault</h1>
-            </div>
           </div>
           <div class="actions-group">
             <el-button type="primary" class="create-btn" @click="showCreateDialog = true">
@@ -809,8 +800,8 @@ watch(searchKeyword, (val) => {
 }
 
 .el-header {
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-border);
   display: flex;
   align-items: center;
   padding: 0 var(--spacing-6);
@@ -835,24 +826,6 @@ watch(searchKeyword, (val) => {
   padding: var(--spacing-2);
 }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.brand h1 {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-}
-
 .actions-group {
   display: flex;
   align-items: center;
@@ -864,9 +837,9 @@ watch(searchKeyword, (val) => {
 }
 
 .sidebar {
-  background: var(--color-surface);
+  background: var(--color-bg);
   padding: var(--spacing-4);
-  border-right: 1px solid var(--color-border);
+  box-shadow: var(--shadow-border);
 }
 
 .search-input {
@@ -886,18 +859,17 @@ watch(searchKeyword, (val) => {
   line-height: 40px;
   display: flex;
   align-items: center;
+  gap: var(--spacing-2);
 }
 
-.nav-section :deep(.el-menu-item span) {
+.nav-section :deep(.el-menu-item span:not(.count)) {
   flex: 1;
 }
 
 .count {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
-  background: var(--color-bg);
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
+  margin-left: auto;
 }
 
 .category-section h3 {
@@ -936,18 +908,18 @@ watch(searchKeyword, (val) => {
 
 .prompt-card {
   cursor: pointer;
-  transition: all var(--transition-normal);
-  border: 1px solid var(--color-border);
+  transition: box-shadow var(--transition-normal);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-card);
 }
 
 .prompt-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--color-border-hover);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .prompt-card.pinned {
-  border-color: var(--color-primary);
-  background: var(--color-primary-light);
+  box-shadow: var(--shadow-card-hover);
+  background: #fafafa;
 }
 
 .card-header {
@@ -1043,7 +1015,7 @@ watch(searchKeyword, (val) => {
   justify-content: space-between;
   align-items: center;
   padding-top: var(--spacing-3);
-  border-top: 1px solid var(--color-border);
+  box-shadow: 0 1px 0 0 var(--color-border);
 }
 
 .version-badge {
@@ -1149,16 +1121,14 @@ watch(searchKeyword, (val) => {
 .template-card {
   padding: var(--spacing-4);
   background: var(--color-bg);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: box-shadow var(--transition-fast);
 }
 
 .template-card:hover {
-  border-color: var(--color-primary);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .tpl-header {

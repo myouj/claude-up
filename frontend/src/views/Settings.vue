@@ -1,17 +1,5 @@
 <template>
   <div class="settings-page">
-    <BreadcrumbNav :items="[{ name: '设置' }]" />
-    <el-header>
-      <div class="header-content">
-        <div class="left">
-          <el-button class="back-btn" @click="goBack">
-            <el-icon><ArrowLeft /></el-icon>
-          </el-button>
-          <h1>设置</h1>
-        </div>
-      </div>
-    </el-header>
-
     <el-main>
       <div v-if="loading" class="loading-state">
         <el-icon class="is-loading"><Loading /></el-icon>
@@ -201,7 +189,6 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import BreadcrumbNav from '../components/BreadcrumbNav.vue'
 
 const router = useRouter()
 
@@ -291,56 +278,15 @@ const toggleVisible = (key) => {
   }
 }
 
-const goBack = () => router.back()
-
 onMounted(fetchSettings)
 </script>
 
 <style scoped>
 .settings-page {
-  height: 100vh;
   background: var(--color-bg);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.el-header {
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
-  display: flex;
-  align-items: center;
-  padding: 0 var(--spacing-6);
-  height: 64px;
-  flex-shrink: 0;
-}
-
-.header-content {
-  width: 100%;
-  display: flex;
-  align-items: center;
-}
-
-.left {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-}
-
-.left h1 {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  margin: 0;
-}
-
-.back-btn {
-  padding: var(--spacing-2);
 }
 
 .el-main {
-  flex: 1;
-  overflow-y: auto;
   padding: var(--spacing-5);
 }
 

@@ -6,12 +6,6 @@
           <el-button class="mobile-menu-btn" @click="showSidebar = true">
             <el-icon><Menu /></el-icon>
           </el-button>
-          <div class="brand">
-            <el-button class="back-btn" @click="goBack">
-              <el-icon><ArrowLeft /></el-icon>
-            </el-button>
-            <h1>团队</h1>
-          </div>
         </div>
         <div class="actions-group">
           <el-button type="primary" @click="showCreateDialog = true">
@@ -165,7 +159,6 @@ const canDelete = (team) => {
   return currentUser.value.role === 'owner'
 }
 
-const goBack = () => router.push('/')
 const goToTeam = (team) => router.push(`/teams/${team.id}/members`)
 const goToSettings = (id) => router.push(`/teams/${id}/settings`)
 const goToMembers = (id) => router.push(`/teams/${id}/members`)
@@ -247,23 +240,6 @@ const formatDate = (dateStr) => {
   display: flex;
   align-items: center;
   gap: var(--spacing-3);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-}
-
-.back-btn {
-  padding: var(--spacing-2);
-}
-
-.brand h1 {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  margin: 0;
 }
 
 .mobile-menu-btn {

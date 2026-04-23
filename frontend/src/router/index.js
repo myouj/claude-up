@@ -7,6 +7,11 @@ const routes = [
     component: () => import('../views/Dashboard.vue')
   },
   {
+    path: '/style-guide',
+    name: 'StyleGuide',
+    component: () => import('../views/StyleGuide.vue')
+  },
+  {
     path: '/prompts',
     name: 'PromptList',
     component: () => import('../views/PromptList.vue')

@@ -3,12 +3,6 @@
     <BreadcrumbNav :items="[{ name: '活动日志' }]" />
     <el-header>
       <div class="header-content">
-        <div class="left">
-          <el-button class="back-btn" @click="goBack">
-            <el-icon><ArrowLeft /></el-icon>
-          </el-button>
-          <h1>活动日志</h1>
-        </div>
         <div class="right">
           <el-select v-model="filterEntityType" placeholder="全部类型" clearable class="filter-select">
             <el-option label="提示词" value="prompt" />
@@ -167,8 +161,6 @@ const fetchLogs = async () => {
   }
 }
 
-const goBack = () => router.back()
-
 watch(filterEntityType, () => {
   currentPage.value = 1
   fetchLogs()
@@ -192,8 +184,8 @@ onMounted(fetchLogs)
 }
 
 .el-header {
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-border);
   display: flex;
   align-items: center;
   padding: 0 var(--spacing-6);
@@ -204,26 +196,9 @@ onMounted(fetchLogs)
 .header-content {
   width: 100%;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-4);
-}
-
-.left {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-}
-
-.left h1 {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  margin: 0;
-}
-
-.back-btn {
-  padding: var(--spacing-2);
 }
 
 .right {

@@ -1,25 +1,8 @@
 <template>
   <div class="dashboard">
-    <el-header>
-      <div class="header-content">
-        <div class="brand" @click="$router.push('/')">
-          <div class="logo">
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-              <rect width="32" height="32" rx="8" fill="var(--color-primary)"/>
-              <path d="M8 10h16M8 16h10M8 22h12" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
-            </svg>
-          </div>
-          <div class="brand-text">
-            <h1>AI Hub</h1>
-            <span class="subtitle">AI 周边服务管理</span>
-          </div>
-        </div>
-      </div>
-    </el-header>
-
-    <el-main>
+    <main class="dashboard-main">
       <div class="stats-grid">
-        <el-card class="stat-card prompts" @click="goToPrompts">
+        <div class="stat-card prompts clickable" @click="goToPrompts">
           <div class="stat-icon">
             <el-icon><Document /></el-icon>
           </div>
@@ -27,9 +10,9 @@
             <span class="stat-value">{{ stats.prompts }}</span>
             <span class="stat-label">提示词</span>
           </div>
-        </el-card>
+        </div>
 
-        <el-card class="stat-card skills" @click="goToSkills">
+        <div class="stat-card skills clickable" @click="goToSkills">
           <div class="stat-icon">
             <el-icon><Timer /></el-icon>
           </div>
@@ -37,9 +20,9 @@
             <span class="stat-value">{{ stats.skills }}</span>
             <span class="stat-label">Skills</span>
           </div>
-        </el-card>
+        </div>
 
-        <el-card class="stat-card agents" @click="goToAgents">
+        <div class="stat-card agents clickable" @click="goToAgents">
           <div class="stat-icon">
             <el-icon><User /></el-icon>
           </div>
@@ -47,55 +30,55 @@
             <span class="stat-value">{{ stats.agents }}</span>
             <span class="stat-label">Agents</span>
           </div>
-        </el-card>
+        </div>
       </div>
 
       <div class="quick-actions">
-        <h2>快速操作</h2>
+        <h2 class="section-title">快速操作</h2>
         <div class="actions-grid">
-          <el-card class="action-card" @click="goToPrompts">
+          <div class="action-card clickable" @click="goToPrompts">
             <el-icon class="action-icon"><Document /></el-icon>
             <span>管理提示词</span>
-          </el-card>
-          <el-card class="action-card" @click="goToSkills">
+          </div>
+          <div class="action-card clickable" @click="goToSkills">
             <el-icon class="action-icon"><Timer /></el-icon>
             <span>管理 Skills</span>
-          </el-card>
-          <el-card class="action-card" @click="goToAgents">
+          </div>
+          <div class="action-card clickable" @click="goToAgents">
             <el-icon class="action-icon"><User /></el-icon>
             <span>管理 Agents</span>
-          </el-card>
-          <el-card class="action-card" @click="goToAnalytics">
+          </div>
+          <div class="action-card clickable" @click="goToAnalytics">
             <el-icon class="action-icon"><DataAnalysis /></el-icon>
             <span>测试分析</span>
-          </el-card>
-          <el-card class="action-card" @click="goToActivity">
+          </div>
+          <div class="action-card clickable" @click="goToActivity">
             <el-icon class="action-icon"><Clock /></el-icon>
             <span>活动日志</span>
-          </el-card>
-          <el-card class="action-card" @click="goToSettings">
+          </div>
+          <div class="action-card clickable" @click="goToSettings">
             <el-icon class="action-icon"><Setting /></el-icon>
             <span>设置</span>
-          </el-card>
-          <el-card class="action-card" @click="goToApiDocs">
+          </div>
+          <div class="action-card clickable" @click="goToApiDocs">
             <el-icon class="action-icon"><Collection /></el-icon>
             <span>API 文档</span>
-          </el-card>
-          <el-card class="action-card" @click="goToABTests">
+          </div>
+          <div class="action-card clickable" @click="goToABTests">
             <el-icon class="action-icon"><DataLine /></el-icon>
             <span>A/B 测试</span>
-          </el-card>
-          <el-card class="action-card" @click="goToTeams">
+          </div>
+          <div class="action-card clickable" @click="goToTeams">
             <el-icon class="action-icon"><Users /></el-icon>
             <span>团队协作</span>
-          </el-card>
-          <el-card class="action-card" @click="goToTemplates">
+          </div>
+          <div class="action-card clickable" @click="goToTemplates">
             <el-icon class="action-icon"><Shop /></el-icon>
             <span>模板市场</span>
-          </el-card>
+          </div>
         </div>
       </div>
-    </el-main>
+    </main>
   </div>
 </template>
 
@@ -141,39 +124,7 @@ onMounted(fetchStats)
   background: var(--color-bg);
 }
 
-.el-header {
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
-  display: flex;
-  align-items: center;
-  padding: 0 var(--spacing-6);
-  height: 64px;
-  flex-shrink: 0;
-}
-
-.header-content {
-  width: 100%;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-4);
-}
-
-.brand-text h1 {
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
-  margin: 0;
-}
-
-.subtitle {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-}
-
-.el-main {
+.dashboard-main {
   padding: var(--spacing-8);
   max-width: 1200px;
   margin: 0 auto;
@@ -191,12 +142,14 @@ onMounted(fetchStats)
   align-items: center;
   gap: var(--spacing-5);
   padding: var(--spacing-5);
-  cursor: pointer;
-  transition: all var(--transition-normal);
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--transition-normal);
 }
 
 .stat-card:hover {
-  transform: translateY(-4px);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .stat-icon {
@@ -207,20 +160,21 @@ onMounted(fetchStats)
   justify-content: center;
   border-radius: var(--radius-lg);
   font-size: 28px;
+  flex-shrink: 0;
 }
 
 .stat-card.prompts .stat-icon {
-  background: var(--color-primary-light);
+  background: #f3f4f6;
   color: var(--color-primary);
 }
 
 .stat-card.skills .stat-icon {
-  background: var(--color-success-light);
+  background: #ecfdf5;
   color: var(--color-success);
 }
 
 .stat-card.agents .stat-icon {
-  background: var(--color-warning-light);
+  background: #fffbeb;
   color: var(--color-warning);
 }
 
@@ -231,9 +185,10 @@ onMounted(fetchStats)
 
 .stat-value {
   font-size: var(--font-size-3xl);
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
   color: var(--color-text-primary);
-  line-height: 1;
+  line-height: var(--line-height-tight);
 }
 
 .stat-label {
@@ -242,9 +197,10 @@ onMounted(fetchStats)
   margin-top: var(--spacing-1);
 }
 
-.quick-actions h2 {
+.section-title {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
   color: var(--color-text-primary);
   margin-bottom: var(--spacing-4);
 }
@@ -261,17 +217,19 @@ onMounted(fetchStats)
   align-items: center;
   justify-content: center;
   padding: var(--spacing-8);
-  cursor: pointer;
-  transition: all var(--transition-normal);
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--transition-normal);
   text-align: center;
 }
 
 .action-card:hover {
-  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .action-icon {
-  font-size: 48px;
+  font-size: 32px;
   color: var(--color-primary);
   margin-bottom: var(--spacing-3);
 }
@@ -292,13 +250,6 @@ onMounted(fetchStats)
 }
 
 @media (max-width: 768px) {
-  .el-header {
-    padding: 0 var(--spacing-4);
-    height: 56px;
-  }
-  .subtitle {
-    display: none;
-  }
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: var(--spacing-3);
@@ -306,7 +257,7 @@ onMounted(fetchStats)
   .actions-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  .el-main {
+  .dashboard-main {
     padding: var(--spacing-4);
   }
   .stat-card {

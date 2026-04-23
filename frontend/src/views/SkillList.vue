@@ -6,12 +6,6 @@
           <el-button class="mobile-menu-btn" @click="showSidebar = true">
             <el-icon><Menu /></el-icon>
           </el-button>
-          <div class="brand">
-            <el-button class="back-btn" @click="goBack">
-              <el-icon><ArrowLeft /></el-icon>
-            </el-button>
-            <h1>Skills</h1>
-          </div>
         </div>
         <div class="actions-group">
           <el-button type="primary" @click="showCreateDialog = true">
@@ -304,7 +298,6 @@ const handleDelete = async (skill) => {
   }
 }
 
-const goBack = () => router.push('/')
 const goToEditor = (id) => router.push(`/skills/${id}`)
 const goToTranslate = (id) => router.push(`/skills/${id}/translate`)
 
@@ -320,8 +313,8 @@ watch(currentPage, () => fetchSkills())
 }
 
 .el-header {
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-border);
   display: flex;
   align-items: center;
   padding: 0 var(--spacing-6);
@@ -333,16 +326,6 @@ watch(currentPage, () => fetchSkills())
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.brand h1 {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-}
-
-.back-btn {
-  padding: var(--spacing-2);
 }
 
 .el-main {
@@ -357,15 +340,17 @@ watch(currentPage, () => fetchSkills())
 
 .skill-card {
   cursor: pointer;
-  transition: all var(--transition-normal);
+  transition: box-shadow var(--transition-normal);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-card);
 }
 
 .skill-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--color-border-hover);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .skill-card.builtin {
+  box-shadow: var(--shadow-card-hover);
   border-left: 3px solid var(--color-success);
 }
 
